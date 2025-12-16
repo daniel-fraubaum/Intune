@@ -1,6 +1,6 @@
 
 <#
-Script: Remediate SecureBoot MicrosoftUpdateManagedOptIn
+Script: Remediate SecureBoot Cert Update MicrosoftUpdateManagedOptIn
 Author: Daniel Fraubaum | headsinthecloud.blog
 Version: 1.0.0
 Date: 2025-12-16
