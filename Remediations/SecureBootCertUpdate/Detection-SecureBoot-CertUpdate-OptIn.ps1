@@ -1,14 +1,13 @@
 
 <#
-.SCRIPT NAME:    Detection-SecureBoot-OptIn.ps1
-.AUTHOR:         Fraubaum Daniel | base-IT
-.VERSION:        1.0
-.DATE:           16.12.2025
-.DESCRIPTION:    This script checks if the registry value 
-                 'MicrosoftUpdateManagedOptIn' under 
-                 HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\ 
-                 is set to 1. If yes, it returns compliant (exit code 0),
-                 otherwise non-compliant (exit code 1).
+Script: Detect SecureBoot Cert Update MicrosoftUpdateManagedOptIn
+Author: Daniel Fraubaum | headsinthecloud.blog
+Version: 1.0.0
+Date: 2025-12-16
+Description: Intune Remediation Detection Script.
+             Checks if the registry value 'MicrosoftUpdateManagedOptIn'
+             under HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\ is set to 1.
+             Exits 0 if compliant, exits 1 if non-compliant.
 #>
 
 # ==============================
@@ -46,3 +45,4 @@ catch {
     Write-Error "Detection failed: $($_.Exception.Message)"
     exit 1
 }
+
