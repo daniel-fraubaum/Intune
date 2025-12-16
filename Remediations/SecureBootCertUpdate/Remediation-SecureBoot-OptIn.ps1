@@ -1,13 +1,13 @@
 
 <#
-.SCRIPT NAME:    Remediation-SecureBoot-OptIn.ps1
-.AUTHOR:         Fraubaum Daniel | base-IT
-.VERSION:        1.0
-.DATE:           16.12.2025
-.DESCRIPTION:    This script checks if the registry value 
-                 'MicrosoftUpdateManagedOptIn' under 
-                 HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\ 
-                 is set to 1. If not, it remediates the value.
+Script: Remediate SecureBoot MicrosoftUpdateManagedOptIn
+Author: Daniel Fraubaum | headsinthecloud.blog
+Version: 1.0.0
+Date: 2025-12-16
+Description: Intune Remediation Script.
+             Ensures that the registry value 'MicrosoftUpdateManagedOptIn'
+             under HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\ is set to 1.
+             Creates the path if missing and applies the correct value.
 #>
 
 # ==============================
@@ -42,3 +42,4 @@ try {
 catch {
     Write-Error "Remediation failed: $($_.Exception.Message)"
 }
+
