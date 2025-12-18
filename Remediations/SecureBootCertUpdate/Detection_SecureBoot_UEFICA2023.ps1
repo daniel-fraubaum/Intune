@@ -40,11 +40,11 @@ function Get-RegistryValue {
 
 # Step 1: Check registry for update status
 $status  = Get-RegistryValue -Path $regPath -Key "UEFICA2023Status"
-$error   = Get-RegistryValue -Path $regPath -Key "UEFICA2023Error"
+$errorVal   = Get-RegistryValue -Path $regPath -Key "UEFICA2023Error"
 $capable = Get-RegistryValue -Path $regPath -Key "WindowsUEFICA2023Capable"
 
-if (($status -eq "Updated" -or $capable -eq 2) -and ($null -eq $error -or $error -eq 0)) {
-    Write-Output "Compliant: Registry indicates Secure Boot CA 2023 update applied (Status='$status', Capable=$capable, Error=$error)."
+if (($status -eq "Updated" -or $capable -eq 2) -and ($null -eq $errorVal -or $errorVal -eq 0)) {
+    Write-Output "Compliant: Registry indicates Secure Boot CA 2023 update applied (Status='$status', Capable=$capable, Error=$errorVal)."
     exit 0
 }
 
