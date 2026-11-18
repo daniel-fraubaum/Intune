@@ -2,7 +2,7 @@
     Script:      ShowFileExtensions_Remediate.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.0
+    Version:     1.1
     Date:        2026-11-18
     Description: Shows file extensions for known file types in File Explorer.
 #>
