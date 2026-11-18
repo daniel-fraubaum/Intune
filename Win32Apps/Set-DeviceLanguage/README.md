@@ -75,6 +75,15 @@ These three are separate settings in Windows and it pays off to keep them separa
 
 A user in Vienna who prefers English menus still wants `18.11.2026`, a decimal comma and Euro. That is `-Language "en-US" -Culture "de-AT" -GeoId 14`.
 
+`-Culture` and `-GeoId` are optional:
+
+| Left out | Result |
+|---|---|
+| `-Culture` | Regional format follows the display language. `-Language "en-US"` alone gives `11/18/2026`, a decimal point and US dollar. |
+| `-GeoId` | Country or region stays as it is (OOBE selection on new devices, current value on existing ones). |
+
+Leave them out when language and format belong together, for example `-Language "hu-HU"` for a user who wants Hungarian throughout. Pass them when only the display language should change.
+
 ### Finding the right values
 
 Full lists: [Languages](./Reference/Languages.md), [Cultures](./Reference/Cultures.md), [GeoIds](./Reference/GeoIds.md)
