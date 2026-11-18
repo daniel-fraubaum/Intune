@@ -8,6 +8,18 @@ Last update: **2026-11-18**
 This folder contains an **Intune Remediation** pair that keeps Windows devices from running for weeks without a restart.  
 When a device has been up longer than `$MaxUptimeDays`, the signed-in user gets a modern popup with a live countdown. When the countdown runs out, the device is restarted by a SYSTEM task, whether or not the user reacted to the popup.
 
+## Preview
+
+| Dark mode | Light mode |
+|---|---|
+| ![Popup in dark mode](images/popup-dark.png) | ![Popup in light mode](images/popup-light.png) |
+
+During the last 15 minutes the popup turns red and can no longer be hidden:
+
+![Popup in the final phase](images/popup-final-phase.png)
+
+The popup follows the Windows app theme automatically.
+
 > Important  
 > This remediation **restarts devices**. Test on a pilot group first and tell your users before you roll it out.
 
