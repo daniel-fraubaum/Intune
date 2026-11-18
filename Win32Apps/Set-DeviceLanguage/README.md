@@ -77,6 +77,8 @@ A user in Vienna who prefers English menus still wants `18.11.2026`, a decimal c
 
 ### Finding the right values
 
+Full lists: [Languages](./Reference/Languages.md), [Cultures](./Reference/Cultures.md), [GeoIds](./Reference/GeoIds.md)
+
 | Value | Where to find it |
 |---|---|
 | Language | Microsoft list [Available languages for Windows](https://learn.microsoft.com/windows-hardware/manufacture/desktop/available-language-packs-for-windows), column "Language/region tag" |
