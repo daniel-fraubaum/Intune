@@ -5,6 +5,7 @@ Unless noted otherwise, run them as **SYSTEM** in **64-bit PowerShell**.
 
 | Folder | Description |
 | --- | --- |
+| [CompanyPortalSearchShortcut](./CompanyPortalSearchShortcut) | Adds an English-named Company Portal shortcut so Start search finds "Intune" and "Company Portal" on non-English clients |
 | [CVE-2013-3900](./CVE-2013-3900) | Enables the WinVerifyTrust signature validation fix (`EnableCertPaddingCheck`) for CVE-2013-3900 |
 | [DisableNetBIOS](./DisableNetBIOS) | Disables NetBIOS over TCP/IP on all active, physical network adapters |
 | [FixUnquotedServicePaths](./FixUnquotedServicePaths) | Finds and quotes unquoted service paths and uninstall strings |
