@@ -19,6 +19,14 @@ On a German Windows the app is only called **Unternehmensportal**, so users who 
 
 ---
 
+## Result
+
+On a German Windows 11 client, typing `company` in Start search now returns the Company Portal as best match:
+
+![Start search for "company" finds the Company Portal on a German client](images/start-search-company.png)
+
+---
+
 ## Files
 
 - `CompanyPortalSearchShortcut_Detect.ps1`  
