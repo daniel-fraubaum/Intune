@@ -2,10 +2,11 @@
     Script:      CompanyPortalSearchShortcut_Detect.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.0
+    Version:     1.1
     Date:        2026-11-23
-    Description: Detects whether an English-named Company Portal shortcut exists in the All Users
-                 Start Menu, so Start search finds "Intune" and "Company Portal" on non-English clients.
+    Description: Detects whether an English-named Company Portal shortcut with the Company Portal icon
+                 exists in the All Users Start Menu, so Start search finds "Intune" and "Company Portal"
+                 on non-English clients.
 #>
 
 # ==== Parameters ====
@@ -13,6 +14,7 @@ $ShortcutName   = "Intune Company Portal"
 $PackageName    = "Microsoft.CompanyPortal"
 $AppUserModelId = "Microsoft.CompanyPortal_8wekyb3d8bbwe!App"
 $StartMenuPath  = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs"
+$IconFolder     = "$env:ProgramData\CompanyPortalSearchShortcut"
 
 # ==== Logic ====
 try {
@@ -30,11 +32,18 @@ try {
         exit 1
     }
 
-    # Step 3: Check that the shortcut points to the Company Portal app
+    # Step 3: Check that the shortcut starts the app through Explorer
     $WshShell = New-Object -ComObject WScript.Shell
     $Shortcut = $WshShell.CreateShortcut($ShortcutFile)
-    if (("$($Shortcut.TargetPath) $($Shortcut.Arguments)") -notlike "*$AppUserModelId*") {
+    if ($Shortcut.TargetPath -ne "$env:WINDIR\explorer.exe" -or $Shortcut.Arguments -ne "shell:AppsFolder\$AppUserModelId") {
         Write-Output "Not compliant: shortcut target is incorrect"
+        exit 1
+    }
+
+    # Step 4: Check that the icon exists and is used
+    $IconFile = Join-Path $IconFolder "CompanyPortal.ico"
+    if (-not (Test-Path -Path $IconFile) -or $Shortcut.IconLocation -notlike "$IconFile*") {
+        Write-Output "Not compliant: icon missing or not set"
         exit 1
     }
 
