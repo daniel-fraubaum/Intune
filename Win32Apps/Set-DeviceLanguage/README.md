@@ -16,18 +16,19 @@ No Store Local Experience Packs, no Administrative Template policies that lock u
 - Checks all prerequisites before changing anything
 - Logs to the Intune Management Extension log folder, so "Collect diagnostics" picks it up
 - Returns `3010`, the restart is handled by Intune
+- Does not collide with cumulative updates: waits for running servicing operations and returns `1618` (retry) instead of failing
 
 ## ⚙️ How it works
 
 | Step | Context | What happens |
 |---|---|---|
 | 1 | SYSTEM | Prerequisite checks (64-bit, admin, Windows 11 22H2+, module, valid tags) |
-| 2 | SYSTEM | `Install-Language` if the language is not installed yet |
+| 2 | SYSTEM | If the language is not installed yet: check for a pending reboot, wait for running servicing operations, then `Install-Language` |
 | 3 | SYSTEM | Display language, language list, regional format, country/region and system locale for the SYSTEM account |
 | 4 | SYSTEM | `Copy-UserInternationalSettingsToSystem` to the Welcome screen and new user profiles |
 | 5 | User | For every signed-in user: one-time scheduled task that sets language list, display language, regional format and country/region |
 | 6 | SYSTEM | Detection marker in the registry |
-| 7 | Intune | Exit code `3010`, restart with the Intune restart grace period |
+| 7 | Intune | Exit code `3010`, restart with the Intune restart grace period. Exit code `1618` if the installation has to be retried |
 
 If nobody is signed in, step 5 is skipped. The first user who signs in after the restart gets the settings from step 4.
 
@@ -53,6 +54,10 @@ Before packaging, adjust the configuration block at the top of the script. These
 | `$WorkingFolder` | `%ProgramData%\DeviceLanguage` | Temporary folder for the user script, cleaned up afterwards |
 | `$LogFile` | `%ProgramData%\Microsoft\IntuneManagementExtension\Logs\Set-DeviceLanguage.log` | Log file |
 | `$UserTaskTimeoutSeconds` | `300` | Maximum wait time for the user part |
+| `$RetryExitCode` | `1618` | Exit code for "try again later". Intune maps `1618` to Retry by default |
+| `$ServicingWaitMinutes` | `10` | Maximum wait time for running servicing operations before `Install-Language` |
+| `$ServicingCheckIntervalSeconds` | `30` | Check interval while waiting |
+| `$ServicingProcessNames` | `TiWorker` | Processes that indicate an active servicing operation |
 
 ## 🎛️ Parameters
 
@@ -118,7 +123,8 @@ Sets the language during device setup, before the first user signs in.
 | Uninstall command | `reg.exe delete "HKLM\SOFTWARE\CompanyName\DeviceLanguage" /v InitialLanguage /f /reg:64` |
 | Install behavior | System |
 | Device restart behavior | Determine behavior based on return codes |
-| Return codes | `3010` = Soft reboot (default) |
+| Return codes | `3010` = Soft reboot, `1618` = Retry (both default) |
+| Installation time required | `90` minutes (download plus servicing wait) |
 | Detection rule | Registry, key `HKEY_LOCAL_MACHINE\SOFTWARE\CompanyName\DeviceLanguage`, value `InitialLanguage`, string comparison, equals `de-DE` |
 | 32-bit app on 64-bit clients | No |
 | Assignment | Required, device group |
@@ -138,7 +144,8 @@ One app per language, all based on the same package. Users pick their language i
 | Install behavior | System |
 | Allow available uninstall | No |
 | Device restart behavior | Determine behavior based on return codes |
-| Return codes | `3010` = Soft reboot (default) |
+| Return codes | `3010` = Soft reboot, `1618` = Retry (both default) |
+| Installation time required | `90` minutes (download plus servicing wait) |
 | Detection rule | Registry, key `HKEY_LOCAL_MACHINE\SOFTWARE\CompanyName\DeviceLanguage`, value `Language`, string comparison, equals `en-US` |
 | 32-bit app on 64-bit clients | No |
 | Assignment | Available, user group |
@@ -187,7 +194,8 @@ The log is appended on every run and is included in Intune "Collect diagnostics"
 | Exit code | Meaning |
 |---|---|
 | `3010` | Success, restart required |
-| `1` | Prerequisite check failed, language installation failed, or system settings could not be applied |
+| `1618` | Retry: reboot pending, servicing still busy after `$ServicingWaitMinutes`, or `Install-Language` failed. Intune retries the installation |
+| `1` | Prerequisite check failed, or system settings or the detection marker could not be applied |
 
 A failing user part is logged as an error but does not fail the app. The system settings are applied anyway and the user gets them at the latest when a new profile is created.
 
@@ -196,7 +204,7 @@ A failing user part is logged as an error but does not fail the app. The system 
 - **Do not combine** this with the Administrative Template policies *"Restricts the UI languages Windows should use for the selected user"* or *"Restrict selection of Windows menus and dialogs language"*. They lock the display language and block the user's choice.
 - **Time zone** is not touched on purpose. Use the Settings Catalog policy *Time Language Settings > Configure Time Zone* or keep automatic time zone detection.
 - **Shared devices:** Welcome screen, system locale and defaults for new profiles apply to everybody on the device.
-- **Download time:** `Install-Language` can take up to 20 minutes. During the ESP the display language may switch a few times before it settles.
+- **Download time:** `Install-Language` can take up to 20 minutes, on a freshly enrolled device with parallel updates up to 45 minutes. During the ESP the display language may switch a few times before it settles.
 - **Restart:** the display language only takes effect after a restart or sign-out. Intune handles this through return code `3010`.
 - **Enterprise State Roaming** can bring previously used languages back to the user's language list.
 - **Wipe and reset:** installed language packs survive an Intune wipe, the device may come back in the last configured language.
@@ -207,7 +215,9 @@ A failing user part is logged as an error but does not fail the app. The system 
 
 | Symptom | Check |
 |---|---|
-| App fails with exit code 1 | Log file, first lines show the failed prerequisite or the error from `Install-Language` |
+| App fails with exit code 1 | Log file, first lines show the failed prerequisite or the step that failed |
+| App stays in retry (`1618`) | Log shows the reason: pending reboot, busy servicing or the `Install-Language` error code. Restart the device and sync again |
+| `Install-Language` fails with `0x800F0991` | A cumulative update was installed at the same time and the language pack was bundled into the same servicing session. Typical right after Autopilot. The script returns `1618`, after the update reboot the retry succeeds |
 | `Install-Language` fails | Device can reach Windows Update / Features on Demand, no WSUS policy blocks optional content |
 | Display language did not change | Device was restarted, `-Language` is a language from the Microsoft list (not just a culture) |
 | User settings not applied | Log shows the result of the scheduled task for that user |
