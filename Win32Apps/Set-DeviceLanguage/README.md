@@ -195,6 +195,16 @@ To enforce the restart, for example 4 hours after the installation, add `-Restar
 
 After a Company Portal install the user sees a popup in the bottom right corner, in the same style as the [RebootReminder](../../Remediations/RebootReminder). It follows the Windows light or dark theme.
 
+| Dark mode | Light mode |
+|---|---|
+| ![Restart reminder in dark mode](images/popup-reminder-dark.png) | ![Restart reminder in light mode](images/popup-reminder-light.png) |
+
+With `-RestartDeadlineMinutes` the popup shows a live countdown. During the last `$FinalPhaseMinutes` (default 15) it turns red and can no longer be hidden:
+
+| Countdown | Final phase |
+|---|---|
+| ![Restart reminder with countdown](images/popup-countdown-dark.png) | ![Restart reminder in the final phase](images/popup-final-phase.png) |
+
 | Mode | Install command | Behavior |
 |---|---|---|
 | Reminder only (default) | no extra parameter | "Restart now" and "Remind me later". After "later" the popup comes back after `-ReminderIntervalMinutes` (default 30) and at every sign-in, until the device is restarted. Windows never restarts on its own |
