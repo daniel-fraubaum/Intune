@@ -55,12 +55,6 @@ The resulting policy value:
 - `EdgeManagedFavorites_Remediate.ps1`  
   Remediation script. Writes or removes this set, removes stale sets and rebuilds the Edge policy value.
 
-- `Tests\EdgeManagedFavorites.Tests.ps1`  
-  Pester 5 unit tests for the merge logic. Loads only the functions of both scripts via AST, never runs the Logic part and does not touch the registry.
-
-- `Tests\EdgeManagedFavorites.Integration.Tests.ps1`  
-  Pester 5 integration tests against the real registry. Runs only on Windows in an elevated session, uses its own test keys instead of the real Edge policy key and removes them afterwards.
-
 ---
 
 ## How several remediations work together
@@ -131,22 +125,6 @@ Paths are normalized: leading, trailing and double `/` as well as spaces around 
    - **Daily**
 
 Repeat this for every favorites set with its own `$SetName`.
-
----
-
-## Running the tests
-
-Requires **Pester 5** or later (Windows ships Pester 3.4, install a newer one with `Install-Module Pester -Force -SkipPublisherCheck`).
-
-```powershell
-# Unit tests, any OS, no registry access
-Invoke-Pester -Path .\Tests\EdgeManagedFavorites.Tests.ps1 -Output Detailed
-
-# Integration tests, Windows, elevated session
-Invoke-Pester -Path .\Tests\EdgeManagedFavorites.Integration.Tests.ps1 -Output Detailed
-```
-
-The unit tests run every merge test twice, once with the System.Array type data of Windows PowerShell 5.1. That type data is what makes `ConvertTo-Json` write `{"value":[...],"Count":1}` instead of `[...]` for arrays with one element, which is not a valid ManagedFavorites value.
 
 ---
 
