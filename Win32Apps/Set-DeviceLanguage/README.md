@@ -6,7 +6,7 @@ No Store Local Experience Packs, no Administrative Template policies that lock u
 
 ## ✨ Features
 
-- Installs the language pack and language features on demand (skips the download if the language is already there)
+- Installs the language pack and language features on demand (skips the download only if the UI language pack is really there, leftovers from a failed installation do not count)
 - Sets display language, preferred language list, regional format, country/region and system locale
 - Copies the settings to the Welcome screen and to new user profiles
 - Applies the settings to the signed-in user through a one-time scheduled task in user context
@@ -25,7 +25,7 @@ No Store Local Experience Packs, no Administrative Template policies that lock u
 | Step | Context | What happens |
 |---|---|---|
 | 1 | SYSTEM | Prerequisite checks (64-bit, admin, Windows 11 22H2+, module, valid tags) |
-| 2 | SYSTEM | If the language is not installed yet: check for a pending reboot (not with `-InitialSetup`), wait for running servicing operations, then `Install-Language`, second attempt after 5 minutes if it fails |
+| 2 | SYSTEM | If the UI language pack is missing (`Get-InstalledLanguage` shows no `LpCab` or `Lxp`): check for a pending reboot (not with `-InitialSetup`), wait for running servicing operations, then `Install-Language`, second attempt after 5 minutes if it fails or the language pack is still missing afterwards |
 | 3 | SYSTEM | Display language, language list, regional format, country/region and system locale for the SYSTEM account |
 | 4 | SYSTEM | `Copy-UserInternationalSettingsToSystem` to the Welcome screen and new user profiles |
 | 5 | User | For every signed-in user: one-time scheduled task that sets language list, display language, regional format and country/region |
@@ -371,7 +371,8 @@ A failing user part is logged as an error but does not fail the app. The system 
 | `Install-Language` fails with `0x800F0991` | A cumulative update was installed at the same time and the language pack was bundled into the same servicing session. Typical right after Autopilot. The script tries once more after 5 minutes and then returns `1618`. Intune retries 3 times, 5 minutes apart, so the retry only succeeds if the update reboot happens within that window |
 | Company Portal app failed after retries | Restart the device and click Install again in the Company Portal |
 | `Install-Language` fails | Device can reach Windows Update / Features on Demand, no WSUS policy blocks optional content |
-| Display language did not change | Device was restarted, `-Language` is a language from the Microsoft list (not just a culture) |
+| Display language did not change | Device was restarted, `-Language` is a language from the Microsoft list (not just a culture). Run `Get-InstalledLanguage`: if `LanguagePacks` shows `None` for the language, only the features are installed and Windows cannot switch to it. Version 1.5 and later detect this and install again |
+| `Install-Language` fails with `0x800F0991` on every try, even without parallel updates | `Install-Language` reinstalls the current cumulative update together with the language pack. If that update fails on the device, every language fails with it. Check Windows Update history, run `DISM /Online /Cleanup-Image /RestoreHealth`, and if that does not help repair Windows via Settings > System > Recovery > Fix problems using Windows Update |
 | User settings not applied | Log shows the result of the scheduled task for that user |
 | Autopilot app reinstalls after a user change | Detection rule of the Autopilot app uses `InitialLanguage`, not `Language` |
 | Detection never succeeds | "Associated with a 32-bit app on 64-bit clients" is set to No |

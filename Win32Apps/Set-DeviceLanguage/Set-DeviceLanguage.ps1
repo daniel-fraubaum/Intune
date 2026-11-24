@@ -2,7 +2,7 @@
     Script:      Set-DeviceLanguage.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.4
+    Version:     1.5
     Date:        2026-11-24
     Description: Installs a Windows display language and applies display language, preferred
                  language list, regional format and country/region.
@@ -22,6 +22,9 @@
                  both attempts fail, the script returns exit code 1618 so that Intune retries the
                  installation instead of failing it. With -InitialSetup a pending reboot does not
                  stop the installation, the ESP handles reboots.
+                 A language only counts as installed if its UI language pack is present
+                 (LanguagePacks LpCab or Lxp). Language features left behind by a failed
+                 installation do not count, and Install-Language is checked the same way.
 #>
 
 # ==========================================================================================
@@ -176,12 +179,30 @@ if ($Problems.Count -gt 0) {
     exit 1
 }
 
-# Step 3: Install language pack and language features if missing
-$InstalledLanguage = Get-InstalledLanguage -Language $Language -ErrorAction SilentlyContinue
-if ($InstalledLanguage) {
-    Write-Output "Language $Language is already installed. Skipping installation."
+# Step 3: Install language pack and language features if the UI language pack is missing
+# A failed Install-Language can leave only the language features behind (LanguagePacks = None).
+# The language then shows up in Get-InstalledLanguage, but Windows cannot switch to it.
+function Get-LanguagePackState {
+    param ([string]$Tag)
+    $Installed = Get-InstalledLanguage -Language $Tag -ErrorAction SilentlyContinue
+    if (-not $Installed) {
+        return "NotInstalled"
+    }
+    return [string]$Installed.LanguagePacks
+}
+
+function Test-LanguagePackInstalled {
+    param ([string]$Tag)
+    return (Get-LanguagePackState -Tag $Tag) -match "LpCab|Lxp"
+}
+
+$LanguagePackState = Get-LanguagePackState -Tag $Language
+if ($LanguagePackState -match "LpCab|Lxp") {
+    Write-Output "Language $Language is already installed (LanguagePacks: $LanguagePackState). Skipping installation."
 }
 else {
+    Write-Output "Language pack for $Language is missing (LanguagePacks: $LanguagePackState). Installation required."
+
     # Step 3.1: Stop if a reboot from a previous servicing operation is pending (not with -InitialSetup, the ESP handles reboots)
     $PendingRebootKeys = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending",
@@ -217,7 +238,10 @@ else {
         try {
             Write-Output "Installing language $Language (attempt $Attempt of $MaxAttempts). This can take up to 20 minutes."
             Install-Language -Language $Language -ErrorAction Stop | Out-Null
-            Write-Output "Language $Language installed successfully."
+            if (-not (Test-LanguagePackInstalled -Tag $Language)) {
+                throw "Install-Language finished, but the language pack for $Language is still missing (LanguagePacks: $(Get-LanguagePackState -Tag $Language))."
+            }
+            Write-Output "Language $Language installed successfully (LanguagePacks: $(Get-LanguagePackState -Tag $Language))."
             break
         }
         catch {
