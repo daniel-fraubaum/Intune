@@ -8,7 +8,7 @@ Unless noted otherwise, run them as **SYSTEM** in **64-bit PowerShell**.
 | [CompanyPortalSearchShortcut](./CompanyPortalSearchShortcut) | Adds an English-named Company Portal shortcut so Start search finds "Intune" and "Company Portal" on non-English clients<br><img src="CompanyPortalSearchShortcut/images/start-search-company.png" alt="Start search finds the Company Portal" width="360"> |
 | [CVE-2013-3900](./CVE-2013-3900) | Enables the WinVerifyTrust signature validation fix (`EnableCertPaddingCheck`) for CVE-2013-3900 |
 | [DisableNetBIOS](./DisableNetBIOS) | Disables NetBIOS over TCP/IP on all active, physical network adapters |
-| [EdgeManagedFavorites](./EdgeManagedFavorites) | Merges the Edge managed favorites of several remediations into one sorted favorites tree (`ManagedFavorites` policy) |
+| [EdgeManagedFavorites](./EdgeManagedFavorites) | Merges the Edge managed favorites of several remediations into one sorted favorites tree (`ManagedFavorites` policy). Two variants: device policy (HKLM) or user policy (HKCU), use only one |
 | [FixUnquotedServicePaths](./FixUnquotedServicePaths) | Finds and quotes unquoted service paths and uninstall strings |
 | [RebootReminder](./RebootReminder) | Shows a modern reboot popup with countdown after X days uptime and enforces the reboot<br><img src="RebootReminder/images/popup-dark.png" alt="RebootReminder popup in dark mode" width="360"> |
 | [SecureBootCertUpdate](./SecureBootCertUpdate) | Opts devices in to the Microsoft managed Secure Boot certificate update and detects the Windows UEFI CA 2023 |

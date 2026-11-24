@@ -1,13 +1,13 @@
 ﻿<#
-    Script:      EdgeManagedFavorites_Remediate.ps1
+    Script:      EdgeManagedFavorites_HKLM_Detect.ps1
     Author:      Daniel Fraubaum
-    Version:     1.1
+    Version:     1.2
     Date:        2026-11-24
-    Description: Writes the favorites set of this remediation to a staging key and rebuilds the
-                 Microsoft Edge ManagedFavorites policy (HKLM) from all sets on the device.
-                 Several remediations with different SetName values are merged into one
-                 alphabetically sorted favorites tree (folders first, then links).
+    Description: Checks whether the favorites set of this remediation is present and current in
+                 the staging key and whether the Microsoft Edge ManagedFavorites policy (HKLM)
+                 matches the merged result of all sets on the device. Changes nothing.
                  Keep the Parameters section identical in the Detect and Remediate script.
+                 Do not combine with the HKCU variant on the same device.
 #>
 
 # ==========================================================================================
@@ -18,7 +18,8 @@
 $SetName = "General"
 
 # Name of the managed favorites root folder in Edge. Empty = Edge default "Managed favorites".
-# If several sets define a name, the set that comes first alphabetically (by SetName) wins.
+# Must be identical in every favorites remediation. If the values differ, the set that comes
+# first alphabetically (by SetName) wins.
 $TopLevelName = "Company Favorites"
 
 # Favorites of this set.
@@ -203,75 +204,49 @@ function Build-ManagedFavoritesJson {
 # Logic
 # ==========================================================================================
 
-$Mutex = $null
-$HasMutex = $false
 try {
-    # Step 1: Serialize parallel runs of several favorites remediations
-    $Mutex = New-Object System.Threading.Mutex($false, "Global\EdgeManagedFavoritesMerge")
-    try { $HasMutex = $Mutex.WaitOne(120000) }
-    catch [System.Threading.AbandonedMutexException] {
-        # A previous run was terminated while holding the mutex. The mutex is now owned by this run.
-        $HasMutex = $true
-    }
-    if (-not $HasMutex) { throw "Timeout waiting for another favorites remediation to finish." }
-
-    # Step 2: Build the desired state of this set
+    # Step 1: Build the desired state of this set
     Assert-Configuration -Name $SetName -StaleDays $StaleAfterDays -RefreshDays $RefreshAfterDays
     $SetsPath = Join-Path -Path $RegistryBasePath -ChildPath "Sets"
-    $OwnSetPath = Join-Path -Path $SetsPath -ChildPath $SetName
     $DesiredSetJson = ConvertTo-SetJson -Items $Favorites
+    $StoredSets = Get-StoredSets -SetsPath $SetsPath
+    $OwnStored = $StoredSets | Where-Object { $_.Name -eq $SetName } | Select-Object -First 1
+    $Issues = New-Object System.Collections.ArrayList
 
-    # Step 3: Write or remove this set in the staging key
+    # Step 2: Check this set in the staging key
     if ($RemoveSet) {
-        if (Test-Path -Path $OwnSetPath) { Remove-Item -Path $OwnSetPath -Recurse -Force }
+        if ($OwnStored) { [void]$Issues.Add("set ""$SetName"" still present but marked for removal") }
+    }
+    elseif (-not $OwnStored) {
+        [void]$Issues.Add("set ""$SetName"" missing")
     }
     else {
-        if (-not (Test-Path -Path $OwnSetPath)) { New-Item -Path $OwnSetPath -Force | Out-Null }
-        New-ItemProperty -Path $OwnSetPath -Name "Favorites" -Value $DesiredSetJson -PropertyType String -Force | Out-Null
-        New-ItemProperty -Path $OwnSetPath -Name "TopLevelName" -Value "$TopLevelName" -PropertyType String -Force | Out-Null
-        New-ItemProperty -Path $OwnSetPath -Name "LastUpdated" -Value (Get-Date).ToUniversalTime().ToString("o") -PropertyType String -Force | Out-Null
+        if ("$($OwnStored.FavoritesJson)" -cne $DesiredSetJson) { [void]$Issues.Add("favorites of set ""$SetName"" changed") }
+        if ("$($OwnStored.TopLevelName)" -cne "$TopLevelName") { [void]$Issues.Add("top level name of set ""$SetName"" changed") }
+        if (Test-IsStale -LastUpdated $OwnStored.LastUpdated -Days $RefreshAfterDays) { [void]$Issues.Add("set ""$SetName"" refresh due") }
     }
 
-    # Step 4: Clean up stale sets of remediations that are no longer assigned
-    $RemovedSets = New-Object System.Collections.ArrayList
-    foreach ($Set in (Get-StoredSets -SetsPath $SetsPath)) {
+    # Step 3: Check for stale sets waiting for cleanup
+    foreach ($Set in $StoredSets) {
         if ($Set.Name -eq $SetName) { continue }
-        if (Test-IsStale -LastUpdated $Set.LastUpdated -Days $StaleAfterDays) {
-            Remove-Item -Path (Join-Path -Path $SetsPath -ChildPath $Set.Name) -Recurse -Force
-            [void]$RemovedSets.Add($Set.Name)
-        }
+        if (Test-IsStale -LastUpdated $Set.LastUpdated -Days $StaleAfterDays) { [void]$Issues.Add("stale set ""$($Set.Name)"" pending cleanup") }
     }
 
-    # Step 5: Merge all sets into the Edge policy JSON
-    $StoredSets = Get-StoredSets -SetsPath $SetsPath
+    # Step 4: Compare the merged result with the current Edge policy
     $EffectiveSets = Get-EffectiveSets -StoredSets $StoredSets -OwnName $SetName -OwnJson $DesiredSetJson -OwnTopLevelName $TopLevelName -RemoveOwn $RemoveSet -StaleDays $StaleAfterDays
-    $PolicyJson = Build-ManagedFavoritesJson -Sets $EffectiveSets
+    $DesiredPolicyJson = Build-ManagedFavoritesJson -Sets $EffectiveSets
+    $CurrentPolicyJson = Get-RegistryValue -Path $EdgePolicyPath -Name $EdgePolicyName
+    if ("$CurrentPolicyJson" -cne "$DesiredPolicyJson") { [void]$Issues.Add("Edge ManagedFavorites policy differs from merged result") }
 
-    # Step 6: Write or remove the Edge policy value (never recreate the existing policy key)
-    if ($PolicyJson) {
-        if (-not (Test-Path -Path $EdgePolicyPath)) { New-Item -Path $EdgePolicyPath -Force | Out-Null }
-        New-ItemProperty -Path $EdgePolicyPath -Name $EdgePolicyName -Value $PolicyJson -PropertyType String -Force | Out-Null
+    # Step 5: Report
+    if ($Issues.Count -gt 0) {
+        Write-Output "Not compliant: $($Issues -join "; ")."
+        exit 1
     }
-    elseif ($null -ne (Get-RegistryValue -Path $EdgePolicyPath -Name $EdgePolicyName)) {
-        Remove-ItemProperty -Path $EdgePolicyPath -Name $EdgePolicyName -Force
-    }
-
-    # Step 7: Report
-    $SetNames = (@($EffectiveSets | ForEach-Object { $_.Name }) -join ", ")
-    $Action = if ($RemoveSet) { "removed" } else { "written" }
-    $Message = "Set ""$SetName"" $Action. Merged sets: $SetNames."
-    if ($RemovedSets.Count -gt 0) { $Message += " Stale sets removed: $($RemovedSets -join ", ")." }
-    if (-not $PolicyJson) { $Message += " No favorites left, policy value removed." }
-    Write-Output $Message
+    Write-Output "Compliant: set ""$SetName"" current, merged sets: $(@($EffectiveSets | ForEach-Object { $_.Name }) -join ", ")."
     exit 0
 }
 catch {
-    Write-Error "Remediation failed: $($_.Exception.Message)"
+    Write-Error "Detection failed: $($_.Exception.Message)"
     exit 1
-}
-finally {
-    if ($null -ne $Mutex) {
-        if ($HasMutex) { $Mutex.ReleaseMutex() }
-        $Mutex.Dispose()
-    }
 }
