@@ -2,7 +2,7 @@
     Script:      Set-DeviceLanguage.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.3
+    Version:     1.4
     Date:        2026-11-24
     Description: Installs a Windows display language and applies display language, preferred
                  language list, regional format and country/region.
@@ -17,9 +17,11 @@
                  signed-in user, with -InitialSetup or with -NoRestartReminder the script returns
                  3010 and Intune handles the restart.
                  Before Install-Language the script waits until no other servicing operation
-                 (for example a cumulative update) is running. If servicing stays busy, a reboot
-                 is pending or Install-Language fails, the script returns exit code 1618 so that
-                 Intune retries the installation instead of failing it.
+                 (for example a cumulative update) is running. If Install-Language fails, it is
+                 tried once more after 5 minutes. If servicing stays busy, a reboot is pending or
+                 both attempts fail, the script returns exit code 1618 so that Intune retries the
+                 installation instead of failing it. With -InitialSetup a pending reboot does not
+                 stop the installation, the ESP handles reboots.
 #>
 
 # ==========================================================================================
@@ -79,6 +81,9 @@ $ServicingCheckIntervalSeconds = 30
 
 # Processes that indicate an active servicing operation (component store or Windows Update)
 $ServicingProcessNames = @("TiWorker")
+
+# Wait time in minutes before the second Install-Language attempt
+$InstallRetryWaitMinutes = 5
 
 # Restart reminder: popup script shipped next to this script in the .intunewin package
 $PopupFileName = "LanguageRestartPopup.ps1"
@@ -177,13 +182,16 @@ if ($InstalledLanguage) {
     Write-Output "Language $Language is already installed. Skipping installation."
 }
 else {
-    # Step 3.1: Stop if a reboot from a previous servicing operation is pending
+    # Step 3.1: Stop if a reboot from a previous servicing operation is pending (not with -InitialSetup, the ESP handles reboots)
     $PendingRebootKeys = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending",
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
     )
     $PendingReboot = $PendingRebootKeys | Where-Object { Test-Path -Path $_ }
-    if ($PendingReboot) {
+    if ($PendingReboot -and $InitialSetup) {
+        Write-Output "Reboot pending ($($PendingReboot -join ", ")). Initial setup: installing anyway, the ESP handles reboots."
+    }
+    elseif ($PendingReboot) {
         Write-Output "Reboot pending ($($PendingReboot -join ", ")). Language installation postponed, returning $RetryExitCode for Intune retry."
         Stop-Transcript | Out-Null
         exit $RetryExitCode
@@ -203,25 +211,35 @@ else {
         exit $RetryExitCode
     }
 
-    # Step 3.3: Install language, any failure is returned as retry (prerequisites are already checked)
-    try {
-        Write-Output "Installing language $Language. This can take up to 20 minutes."
-        Install-Language -Language $Language -ErrorAction Stop | Out-Null
-        Write-Output "Language $Language installed successfully."
-    }
-    catch {
-        $ErrorMessage = $_.Exception.Message
-        $ErrorCode = ""
-        if ($ErrorMessage -match "ErrorCode:\s*(-?\d+)") {
-            $ErrorCode = " (0x{0:X8})" -f [int]$Matches[1]
+    # Step 3.3: Install language, second attempt after $InstallRetryWaitMinutes minutes, then return retry to Intune (prerequisites are already checked)
+    $MaxAttempts = 2
+    for ($Attempt = 1; $Attempt -le $MaxAttempts; $Attempt++) {
+        try {
+            Write-Output "Installing language $Language (attempt $Attempt of $MaxAttempts). This can take up to 20 minutes."
+            Install-Language -Language $Language -ErrorAction Stop | Out-Null
+            Write-Output "Language $Language installed successfully."
+            break
         }
-        $RebootAfterFailure = $PendingRebootKeys | Where-Object { Test-Path -Path $_ }
-        if ($RebootAfterFailure) {
-            $ErrorMessage += " Reboot is pending now, a parallel update was probably installed."
+        catch {
+            $ErrorMessage = $_.Exception.Message
+            $ErrorCode = ""
+            if ($ErrorMessage -match "ErrorCode:\s*(-?\d+)") {
+                $ErrorCode = " (0x{0:X8})" -f [int]$Matches[1]
+            }
+            $RebootAfterFailure = $PendingRebootKeys | Where-Object { Test-Path -Path $_ }
+            if ($RebootAfterFailure) {
+                $ErrorMessage += " Reboot is pending now, a parallel update was probably installed."
+            }
+            if ($Attempt -lt $MaxAttempts) {
+                Write-Warning "Attempt $Attempt of $MaxAttempts to install language $Language failed$ErrorCode`: $ErrorMessage Trying again in $InstallRetryWaitMinutes minutes."
+                Start-Sleep -Seconds ($InstallRetryWaitMinutes * 60)
+            }
+            else {
+                Write-Error "Attempt $Attempt of $MaxAttempts to install language $Language failed$ErrorCode`: $ErrorMessage Returning $RetryExitCode for Intune retry."
+                Stop-Transcript | Out-Null
+                exit $RetryExitCode
+            }
         }
-        Write-Error "Installation of language $Language failed$ErrorCode`: $ErrorMessage Returning $RetryExitCode for Intune retry."
-        Stop-Transcript | Out-Null
-        exit $RetryExitCode
     }
 }
 

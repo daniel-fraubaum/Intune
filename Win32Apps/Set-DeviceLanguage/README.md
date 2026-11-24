@@ -25,7 +25,7 @@ No Store Local Experience Packs, no Administrative Template policies that lock u
 | Step | Context | What happens |
 |---|---|---|
 | 1 | SYSTEM | Prerequisite checks (64-bit, admin, Windows 11 22H2+, module, valid tags) |
-| 2 | SYSTEM | If the language is not installed yet: check for a pending reboot, wait for running servicing operations, then `Install-Language` |
+| 2 | SYSTEM | If the language is not installed yet: check for a pending reboot (not with `-InitialSetup`), wait for running servicing operations, then `Install-Language`, second attempt after 5 minutes if it fails |
 | 3 | SYSTEM | Display language, language list, regional format, country/region and system locale for the SYSTEM account |
 | 4 | SYSTEM | `Copy-UserInternationalSettingsToSystem` to the Welcome screen and new user profiles |
 | 5 | User | For every signed-in user: one-time scheduled task that sets language list, display language, regional format and country/region |
@@ -61,6 +61,7 @@ Before packaging, adjust the configuration block at the top of the script. These
 | `$ServicingWaitMinutes` | `10` | Maximum wait time for running servicing operations before `Install-Language` |
 | `$ServicingCheckIntervalSeconds` | `30` | Check interval while waiting |
 | `$ServicingProcessNames` | `TiWorker` | Processes that indicate an active servicing operation |
+| `$InstallRetryWaitMinutes` | `5` | Wait time before the second `Install-Language` attempt |
 | `$PopupFileName` | `LanguageRestartPopup.ps1` | Popup script, must be in the package next to `Set-DeviceLanguage.ps1` |
 | `$ReminderRegPath` | `<MarkerKeyPath>\RestartReminder` | Schedule, texts and colors for the popup |
 | `$TaskPath` | `\DeviceLanguage\` | Task Scheduler folder for the reminder tasks |
@@ -144,7 +145,7 @@ Sets the language during device setup, before the first user signs in.
 | Install behavior | System |
 | Device restart behavior | Determine behavior based on return codes |
 | Return codes | `0` = Success, `3010` = Soft reboot, `1618` = Retry (all default) |
-| Installation time required | `90` minutes (download plus servicing wait) |
+| Installation time required | `120` minutes (download, servicing wait and one retry) |
 | Detection rule | Registry, key `HKEY_LOCAL_MACHINE\SOFTWARE\CompanyName\DeviceLanguage`, value `InitialLanguage`, string comparison, equals `de-DE` |
 | 32-bit app on 64-bit clients | No |
 | Assignment | Required, device group |
@@ -165,7 +166,7 @@ One app per language, all based on the same package. Users pick their language i
 | Allow available uninstall | No |
 | Device restart behavior | Determine behavior based on return codes |
 | Return codes | `0` = Success, `3010` = Soft reboot, `1618` = Retry (all default) |
-| Installation time required | `90` minutes (download plus servicing wait) |
+| Installation time required | `120` minutes (download, servicing wait and one retry) |
 | Detection rule | Registry, key `HKEY_LOCAL_MACHINE\SOFTWARE\CompanyName\DeviceLanguage`, value `Language`, string comparison, equals `en-US` |
 | 32-bit app on 64-bit clients | No |
 | Assignment | Available, user group |
@@ -339,7 +340,7 @@ The log is appended on every run and is included in Intune "Collect diagnostics"
 |---|---|
 | `0` | Success, restart reminder is shown to the user |
 | `3010` | Success, restart required and handled by Intune (Autopilot, nobody signed in, `-NoRestartReminder`, or the reminder setup failed) |
-| `1618` | Retry: reboot pending, servicing still busy after `$ServicingWaitMinutes`, or `Install-Language` failed. Intune retries the installation |
+| `1618` | Retry: reboot pending (not with `-InitialSetup`), servicing still busy after `$ServicingWaitMinutes`, or both `Install-Language` attempts failed. Intune retries the installation |
 | `1` | Prerequisite check failed, or system settings or the detection marker could not be applied |
 
 A failing user part is logged as an error but does not fail the app. The system settings are applied anyway and the user gets them at the latest when a new profile is created.
@@ -364,7 +365,8 @@ A failing user part is logged as an error but does not fail the app. The system 
 |---|---|
 | App fails with exit code 1 | Log file, first lines show the failed prerequisite or the step that failed |
 | App stays in retry (`1618`) | Log shows the reason: pending reboot, busy servicing or the `Install-Language` error code. Restart the device and sync again |
-| `Install-Language` fails with `0x800F0991` | A cumulative update was installed at the same time and the language pack was bundled into the same servicing session. Typical right after Autopilot. The script returns `1618`, after the update reboot the retry succeeds |
+| `Install-Language` fails with `0x800F0991` | A cumulative update was installed at the same time and the language pack was bundled into the same servicing session. Typical right after Autopilot. The script tries once more after 5 minutes and then returns `1618`. Intune retries 3 times, 5 minutes apart, so the retry only succeeds if the update reboot happens within that window |
+| Company Portal app failed after retries | Restart the device and click Install again in the Company Portal |
 | `Install-Language` fails | Device can reach Windows Update / Features on Demand, no WSUS policy blocks optional content |
 | Display language did not change | Device was restarted, `-Language` is a language from the Microsoft list (not just a culture) |
 | User settings not applied | Log shows the result of the scheduled task for that user |
