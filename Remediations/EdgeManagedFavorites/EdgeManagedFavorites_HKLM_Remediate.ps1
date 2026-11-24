@@ -1,7 +1,7 @@
 ﻿<#
     Script:      EdgeManagedFavorites_HKLM_Remediate.ps1
     Author:      Daniel Fraubaum
-    Version:     1.2
+    Version:     1.3
     Date:        2026-11-24
     Description: Writes the favorites set of this remediation to a staging key and rebuilds the
                  Microsoft Edge ManagedFavorites policy (HKLM) from all sets on the device.

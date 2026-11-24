@@ -1,7 +1,7 @@
 ﻿<#
     Script:      EdgeManagedFavorites_HKLM_Detect.ps1
     Author:      Daniel Fraubaum
-    Version:     1.2
+    Version:     1.3
     Date:        2026-11-24
     Description: Checks whether the favorites set of this remediation is present and current in
                  the staging key and whether the Microsoft Edge ManagedFavorites policy (HKLM)
