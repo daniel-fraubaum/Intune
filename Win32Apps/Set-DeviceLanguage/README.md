@@ -170,6 +170,9 @@ One app per language, all based on the same package. Users pick their language i
 | Detection rule | Registry, key `HKEY_LOCAL_MACHINE\SOFTWARE\CompanyName\DeviceLanguage`, value `Language`, string comparison, equals `en-US` |
 | 32-bit app on 64-bit clients | No |
 | Assignment | Available, user group |
+| End user notifications | Hide all toast notifications |
+
+Hide the Intune toasts in the assignment, the script shows its own [restart reminder](#-restart-reminder). Otherwise the user gets Intune notifications and the popup for the same restart. Exception: with `-NoRestartReminder` keep **Show toast notifications for computer restarts**, because then the Intune restart notification is the only hint for the user.
 
 Ready-to-use app descriptions are in the section **Company Portal app descriptions** below.
 
