@@ -1,7 +1,7 @@
 ﻿<#
     Script:      EdgeManagedFavorites.Integration.Tests.ps1
     Author:      Daniel Fraubaum
-    Version:     1.1
+    Version:     1.2
     Date:        2026-11-24
     Description: Pester 5 integration tests against the real registry. Runs only on Windows in an elevated
                  session and is skipped everywhere else. The scripts are copied to TEMP with test values for
@@ -84,7 +84,8 @@ BeforeAll {
     }
 
     $TestId = [guid]::NewGuid().ToString("N").Substring(0, 8)
-    $TestRoot = "HKLM:\SOFTWARE\EdgeManagedFavoritesPesterTest_$TestId"
+    $TestRootSubKey = "SOFTWARE\EdgeManagedFavoritesPesterTest_$TestId"
+    $TestRoot = "HKLM:\$TestRootSubKey"
     $TestPolicyPath = "$TestRoot\EdgePolicy"
     $TestTemp = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath "EdgeManagedFavoritesPesterTest_$TestId"
 
@@ -110,8 +111,14 @@ Describe "Integration against the real registry" -Skip:$SkipIntegration {
     }
 
     AfterAll {
-        if (Test-Path -LiteralPath $TestRoot) { Remove-Item -LiteralPath $TestRoot -Recurse -Force }
-        if (Test-Path -LiteralPath $TestTemp) { Remove-Item -LiteralPath $TestTemp -Recurse -Force }
+        # Remove-Item on a direct child of HKLM:\SOFTWARE opens HKLM\SOFTWARE itself with write access, which can be
+        # denied even in an elevated session. DeleteSubKeyTree on the base key only needs DELETE on the test keys.
+        $BaseKey = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Default)
+        try { $BaseKey.DeleteSubKeyTree($TestRootSubKey, $false) }
+        finally { $BaseKey.Dispose() }
+        if (Test-Path -LiteralPath $TestTemp) { Remove-Item -LiteralPath $TestTemp -Recurse -Force -ErrorAction Stop }
+        if (Test-Path -LiteralPath $TestRoot) { throw "Cleanup failed, $TestRoot still exists" }
+        if (Test-Path -LiteralPath $TestTemp) { throw "Cleanup failed, $TestTemp still exists" }
     }
 
     It "Detect reports a missing set" {
