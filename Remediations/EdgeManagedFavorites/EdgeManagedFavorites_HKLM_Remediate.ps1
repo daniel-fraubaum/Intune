@@ -7,13 +7,22 @@
                  Microsoft Edge ManagedFavorites policy (HKLM) from all sets on the device.
                  Several remediations with different SetName values are merged into one
                  alphabetically sorted favorites tree (folders first, then links).
-                 Keep the Parameters section identical in the Detect and Remediate script.
+                 Fill the Parameters block in the Detect script and copy it 1:1 into the
+                 Remediate script, both scripts must always contain the same block.
                  Do not combine with the HKCU variant on the same device.
 #>
 
 # ==========================================================================================
 # Parameters
 # ==========================================================================================
+# This block is identical in the Detect and the Remediate script. How to use it:
+#   1. Fill in your values between PARAMETERS START and PARAMETERS END in the Detect script.
+#   2. Copy everything from PARAMETERS START to PARAMETERS END 1:1 into the Remediate script
+#      and replace the same block there. Do not change anything else in the scripts.
+# If the two blocks differ, detection checks other values than the remediation writes.
+# ==========================================================================================
+
+# ------------------------------------ PARAMETERS START ------------------------------------
 
 # Unique name of this favorites set. Use a different value in every remediation you assign.
 $SetName = "General"
@@ -47,6 +56,8 @@ $RefreshAfterDays = 7
 # Edge policy target
 $EdgePolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
 $EdgePolicyName = "ManagedFavorites"
+
+# ------------------------------------- PARAMETERS END -------------------------------------
 
 # ==========================================================================================
 # Functions

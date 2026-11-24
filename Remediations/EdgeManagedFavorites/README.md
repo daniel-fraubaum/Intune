@@ -113,7 +113,12 @@ HKCU variant:  HKEY_USERS\<SID>\Software\Policies\Microsoft\Edge\ManagedFavorite
 
 ## Parameters
 
-Keep the **Parameters section identical** in the Detect and the Remediate script of one remediation.
+The Detect and the Remediate script of one remediation must always contain the **same Parameters block**. The block is marked with `PARAMETERS START` and `PARAMETERS END`:
+
+1. Fill in your values between the two markers in the **Detect** script.
+2. Copy everything from `PARAMETERS START` to `PARAMETERS END` **1:1** into the **Remediate** script and replace the same block there.
+
+Do not change anything outside the block. If the two blocks differ, detection checks other values than the remediation writes.
 
 | Parameter | Default | Description |
 | --- | --- | --- |
