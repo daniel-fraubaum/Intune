@@ -157,6 +157,8 @@ Use dynamic device groups or Autopilot group tags if different locations need di
 
 One app per language, all based on the same package. Users pick their language in the Company Portal and click Install.
 
+![Language app installing in the Company Portal](images/company-portal-installing.png)
+
 | Setting | Value |
 |---|---|
 | Name | For example `Windows Language: English (US)` |
