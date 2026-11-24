@@ -2,16 +2,20 @@
     Script:      Set-DeviceLanguage.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.2
-    Date:        2026-11-23
+    Version:     1.3
+    Date:        2026-11-24
     Description: Installs a Windows display language and applies display language, preferred
                  language list, regional format and country/region.
                  Settings are copied to the Welcome screen and new user profiles. If a user is
                  signed in, the settings are also applied to that user via a one-time scheduled
                  task in user context (existing languages and keyboards are kept).
                  Built as Intune Win32 app in SYSTEM context for Autopilot ESP (required, with
-                 -InitialSetup) and Company Portal (available). Exit code 3010 signals that a
-                 restart is required.
+                 -InitialSetup) and Company Portal (available).
+                 If a user is signed in, a restart reminder popup (LanguageRestartPopup.ps1, part
+                 of the package) is shown bottom right until the device is restarted, and the
+                 script returns 0. Optionally the restart is enforced after a deadline. Without a
+                 signed-in user, with -InitialSetup or with -NoRestartReminder the script returns
+                 3010 and Intune handles the restart.
                  Before Install-Language the script waits until no other servicing operation
                  (for example a cumulative update) is running. If servicing stays busy, a reboot
                  is pending or Install-Language fails, the script returns exit code 1618 so that
@@ -34,7 +38,16 @@ param (
     [int]$GeoId = 0,
 
     # Use for the Autopilot app: additionally writes the initial language marker
-    [switch]$InitialSetup
+    [switch]$InitialSetup,
+
+    # Restart reminder: enforce the restart after X minutes. 0 = reminder only, never restart automatically
+    [int]$RestartDeadlineMinutes = 0,
+
+    # Restart reminder: "Remind me later" hides the popup for X minutes
+    [int]$ReminderIntervalMinutes = 30,
+
+    # Skip the restart reminder and return 3010, Intune handles the restart
+    [switch]$NoRestartReminder
 )
 
 # Registry key for the Intune detection markers
@@ -67,13 +80,41 @@ $ServicingCheckIntervalSeconds = 30
 # Processes that indicate an active servicing operation (component store or Windows Update)
 $ServicingProcessNames = @("TiWorker")
 
+# Restart reminder: popup script shipped next to this script in the .intunewin package
+$PopupFileName = "LanguageRestartPopup.ps1"
+
+# Restart reminder: registry key for schedule, texts and colors (read by the popup)
+$ReminderRegPath = "$MarkerKeyPath\RestartReminder"
+
+# Restart reminder: Task Scheduler folder and task names
+$TaskPath = "\DeviceLanguage\"
+$PopupTaskName = "LanguageRestart-Popup"
+$RebootTaskName = "LanguageRestart-EnforcedRestart"
+$CleanupTaskName = "LanguageRestart-Cleanup"
+
+# Restart reminder: during the last X minutes before an enforced restart the popup can no longer be hidden
+$FinalPhaseMinutes = 15
+
+# Restart reminder: branding and texts, ASCII only ({0} = language name in MessageText, {0} = deadline time in HintText)
+$CompanyName = "IT Department"
+$AccentColor = "#0078D4"
+$FinalAccentColor = "#C42B1C"
+$TitleText = "Restart required"
+$MessageText = "{0} is ready. Restart your device to switch Windows to the new display language."
+$CountdownLabelText = "Automatic restart in"
+$HintText = "Your device will restart automatically at {0} at the latest."
+$ButtonNowText = "Restart now"
+$ButtonLaterText = "Remind me later"
+$RestartingText = "Your device is restarting now. Please save your work."
+$ShutdownComment = "Restart to apply the new Windows display language."
+
 # ==========================================================================================
 # Logic
 # ==========================================================================================
 
 # Step 1: Start logging
 Start-Transcript -Path $LogFile -Append | Out-Null
-Write-Output "Starting Set-DeviceLanguage. Language: $Language, Culture: $Culture, GeoId: $GeoId"
+Write-Output "Starting Set-DeviceLanguage. Language: $Language, Culture: $Culture, GeoId: $GeoId, RestartDeadlineMinutes: $RestartDeadlineMinutes, ReminderIntervalMinutes: $ReminderIntervalMinutes, NoRestartReminder: $NoRestartReminder"
 
 if ([string]::IsNullOrWhiteSpace($Culture)) {
     $Culture = $Language
@@ -98,6 +139,19 @@ if ($OsBuild -lt 22621) {
 
 if (-not (Get-Module -ListAvailable -Name "LanguagePackManagement")) {
     $Problems += "PowerShell module LanguagePackManagement is not available on this device."
+}
+
+if ($RestartDeadlineMinutes -lt 0) {
+    $Problems += "RestartDeadlineMinutes must be 0 (reminder only) or a positive number of minutes. Current value: $RestartDeadlineMinutes"
+}
+
+if ($ReminderIntervalMinutes -lt 5) {
+    $Problems += "ReminderIntervalMinutes must be at least 5. Current value: $ReminderIntervalMinutes"
+}
+
+$PopupSourcePath = Join-Path -Path $PSScriptRoot -ChildPath $PopupFileName
+if (-not $NoRestartReminder -and -not $InitialSetup -and -not (Test-Path -Path $PopupSourcePath)) {
+    $Problems += "$PopupFileName is missing next to Set-DeviceLanguage.ps1. Add it to the .intunewin source folder or use -NoRestartReminder."
 }
 
 foreach ($Tag in @($Language, $Culture)) {
@@ -291,7 +345,10 @@ catch {
 
 # Step 7: Write detection marker
 try {
-    New-Item -Path $MarkerKeyPath -Force | Out-Null
+    # Create the key only if missing, New-Item -Force would replace an existing key with an empty one
+    if (-not (Test-Path -Path $MarkerKeyPath)) {
+        New-Item -Path $MarkerKeyPath -Force -ErrorAction Stop | Out-Null
+    }
     Set-ItemProperty -Path $MarkerKeyPath -Name $MarkerValueName -Value $Language -ErrorAction Stop
     Set-ItemProperty -Path $MarkerKeyPath -Name "Culture" -Value $Culture -ErrorAction Stop
     Set-ItemProperty -Path $MarkerKeyPath -Name "GeoId" -Value $GeoId -ErrorAction Stop
@@ -309,7 +366,120 @@ catch {
     exit 1
 }
 
-# Step 8: Finish and request restart
+# Step 8: Restart reminder for signed-in users (Company Portal), Intune handles the restart otherwise
+if ($NoRestartReminder) {
+    Write-Output "Restart reminder disabled by -NoRestartReminder."
+}
+elseif ($InitialSetup) {
+    Write-Output "Initial setup: no restart reminder, the restart is handled by Intune and the ESP."
+}
+elseif (-not $SignedInUsers) {
+    Write-Output "No signed-in user: no restart reminder, the restart is handled by Intune."
+}
+else {
+    try {
+        # Step 8.1: Remove tasks and running popups from a previous language change
+        foreach ($TaskName in @($PopupTaskName, $RebootTaskName, $CleanupTaskName)) {
+            Unregister-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        }
+        Get-CimInstance -ClassName Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -like "*$PopupFileName*" } |
+            ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName Terminate | Out-Null }
+
+        # Step 8.2: Write schedule, texts and colors for the popup (HKLM, readable by users)
+        $Now = Get-Date
+        $DeadlineTicks = [int64]0
+        if ($RestartDeadlineMinutes -gt 0) {
+            $Deadline = $Now.AddMinutes($RestartDeadlineMinutes)
+            $DeadlineTicks = $Deadline.ToUniversalTime().Ticks
+        }
+        if (Test-Path -Path $ReminderRegPath) {
+            Remove-Item -Path $ReminderRegPath -Recurse -Force -ErrorAction Stop
+        }
+        New-Item -Path $ReminderRegPath -Force -ErrorAction Stop | Out-Null
+        $ReminderValues = [ordered]@{
+            ScheduledAtUtcTicks     = @($Now.ToUniversalTime().Ticks, "QWord")
+            DeadlineUtcTicks        = @($DeadlineTicks, "QWord")
+            ReminderIntervalMinutes = @($ReminderIntervalMinutes, "DWord")
+            FinalPhaseMinutes       = @($FinalPhaseMinutes, "DWord")
+            LanguageName            = @([System.Globalization.CultureInfo]::GetCultureInfo($Language).EnglishName, "String")
+            CompanyName             = @($CompanyName, "String")
+            AccentColor             = @($AccentColor, "String")
+            FinalAccentColor        = @($FinalAccentColor, "String")
+            TitleText               = @($TitleText, "String")
+            MessageText             = @($MessageText, "String")
+            CountdownLabelText      = @($CountdownLabelText, "String")
+            HintText                = @($HintText, "String")
+            ButtonNowText           = @($ButtonNowText, "String")
+            ButtonLaterText         = @($ButtonLaterText, "String")
+            RestartingText          = @($RestartingText, "String")
+            ShutdownComment         = @($ShutdownComment, "String")
+        }
+        foreach ($Entry in $ReminderValues.GetEnumerator()) {
+            New-ItemProperty -Path $ReminderRegPath -Name $Entry.Key -Value $Entry.Value[0] -PropertyType $Entry.Value[1] -Force -ErrorAction Stop | Out-Null
+        }
+
+        # Step 8.3: Copy the popup to ProgramData with a locked down ACL (users read and execute only)
+        New-Item -Path $WorkingFolder -ItemType Directory -Force | Out-Null
+        $Acl = New-Object System.Security.AccessControl.DirectorySecurity
+        $Acl.SetAccessRuleProtection($true, $false)
+        $Inheritance = [System.Security.AccessControl.InheritanceFlags]"ContainerInherit, ObjectInherit"
+        $Propagation = [System.Security.AccessControl.PropagationFlags]::None
+        foreach ($AclEntry in @(@("S-1-5-18", "FullControl"), @("S-1-5-32-544", "FullControl"), @("S-1-5-32-545", "ReadAndExecute"))) {
+            $Sid = New-Object System.Security.Principal.SecurityIdentifier($AclEntry[0])
+            $Rule = New-Object System.Security.AccessControl.FileSystemAccessRule($Sid, $AclEntry[1], $Inheritance, $Propagation, "Allow")
+            $Acl.AddAccessRule($Rule)
+        }
+        Set-Acl -Path $WorkingFolder -AclObject $Acl -ErrorAction Stop
+        $PopupPath = Join-Path -Path $WorkingFolder -ChildPath $PopupFileName
+        Copy-Item -Path $PopupSourcePath -Destination $PopupPath -Force -ErrorAction Stop
+
+        # Step 8.4: Cleanup task, removes tasks, registry state and popup at the next startup
+        $SystemPowerShell = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+        $SystemPrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $CleanupScript = "foreach (`$Name in @('$PopupTaskName', '$RebootTaskName', '$CleanupTaskName')) { Unregister-ScheduledTask -TaskPath '$TaskPath' -TaskName `$Name -Confirm:`$false -ErrorAction SilentlyContinue }; " +
+                         "Remove-Item -Path '$ReminderRegPath' -Recurse -Force -ErrorAction SilentlyContinue; " +
+                         "Remove-Item -Path '$PopupPath' -Force -ErrorAction SilentlyContinue"
+        $EncodedCleanup = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($CleanupScript))
+        $CleanupAction = New-ScheduledTaskAction -Execute $SystemPowerShell -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $EncodedCleanup"
+        $CleanupSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+        Register-ScheduledTask -TaskPath $TaskPath -TaskName $CleanupTaskName -Action $CleanupAction -Trigger (New-ScheduledTaskTrigger -AtStartup) -Principal $SystemPrincipal -Settings $CleanupSettings -Description "Removes the language restart reminder after the restart (Set-DeviceLanguage)" -ErrorAction Stop | Out-Null
+        Write-Output "Cleanup task registered, runs at the next startup."
+
+        # Step 8.5: Optional enforced restart (only if the device has not restarted since the language change)
+        if ($RestartDeadlineMinutes -gt 0) {
+            $ScheduledAtTicks = $Now.ToUniversalTime().Ticks
+            $GuardScript = "if ((Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime -lt ([datetime]::new($ScheduledAtTicks, [DateTimeKind]::Utc)).ToLocalTime()) { & `"$env:SystemRoot\System32\shutdown.exe`" /r /f /t 60 /d p:0:0 /c `"$ShutdownComment`" }"
+            $EncodedGuard = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($GuardScript))
+            $RebootAction = New-ScheduledTaskAction -Execute $SystemPowerShell -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $EncodedGuard"
+            $RebootSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+            Register-ScheduledTask -TaskPath $TaskPath -TaskName $RebootTaskName -Action $RebootAction -Trigger (New-ScheduledTaskTrigger -Once -At $Deadline) -Principal $SystemPrincipal -Settings $RebootSettings -Description "Enforced restart after a display language change (Set-DeviceLanguage)" -ErrorAction Stop | Out-Null
+            Write-Output "Enforced restart task registered for $Deadline."
+        }
+
+        # Step 8.6: Popup task for all signed-in users (now, again every interval as safety net, and at logon)
+        $PopupArguments = "--headless `"$SystemPowerShell`" -NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File `"$PopupPath`" -RegPath `"$ReminderRegPath`""
+        $PopupAction = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\conhost.exe" -Argument $PopupArguments
+        $PopupTriggers = @(
+            (New-ScheduledTaskTrigger -AtLogOn),
+            (New-ScheduledTaskTrigger -Once -At $Now.AddSeconds(5) -RepetitionInterval (New-TimeSpan -Minutes $ReminderIntervalMinutes) -RepetitionDuration (New-TimeSpan -Days 30))
+        )
+        $PopupPrincipal = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545" -RunLevel Limited
+        $PopupSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances Parallel -ExecutionTimeLimit ([TimeSpan]::Zero)
+        Register-ScheduledTask -TaskPath $TaskPath -TaskName $PopupTaskName -Action $PopupAction -Trigger $PopupTriggers -Principal $PopupPrincipal -Settings $PopupSettings -Description "Restart reminder after a display language change (Set-DeviceLanguage)" -ErrorAction Stop | Out-Null
+        Start-ScheduledTask -TaskPath $TaskPath -TaskName $PopupTaskName -ErrorAction Stop
+        Write-Output "Restart reminder popup registered and started."
+
+        Write-Output "Language change to $Language completed. Restart reminder is shown to the user, returning 0."
+        Stop-Transcript | Out-Null
+        exit 0
+    }
+    catch {
+        Write-Error "Restart reminder setup failed: $($_.Exception.Message). Falling back to 3010, Intune handles the restart."
+    }
+}
+
+# Step 9: Finish and request restart through Intune
 Write-Output "Language change to $Language completed. Restart required."
 Stop-Transcript | Out-Null
 exit 3010

@@ -2,7 +2,7 @@
 
 Switch the Windows 11 display language, regional format and country/region with a single Intune Win32 app. One package covers both scenarios: set the language once during Autopilot, and let users change it themselves from the Company Portal with one click.
 
-No Store Local Experience Packs, no Administrative Template policies that lock users in, no message boxes with a 24 hour shutdown timer. The script installs the language with `Install-Language`, applies it to the system, the Welcome screen, new profiles and the signed-in user, and hands the restart over to Intune.
+No Store Local Experience Packs, no Administrative Template policies that lock users in, no message boxes with a 24 hour shutdown timer. The script installs the language with `Install-Language`, applies it to the system, the Welcome screen, new profiles and the signed-in user, and reminds the user to restart with a popup in the bottom right corner.
 
 ## ✨ Features
 
@@ -15,7 +15,9 @@ No Store Local Experience Packs, no Administrative Template policies that lock u
 - Two separate detection markers, so the Autopilot app never overrides the user's later choice
 - Checks all prerequisites before changing anything
 - Logs to the Intune Management Extension log folder, so "Collect diagnostics" picks it up
-- Returns `3010`, the restart is handled by Intune
+- Restart reminder popup in the bottom right corner after a Company Portal install, shown again until the device is restarted (no IME toast)
+- Optional enforced restart with live countdown, set per app on the command line
+- Returns `3010` during Autopilot or when nobody is signed in, the restart is handled by Intune
 - Does not collide with cumulative updates: waits for running servicing operations and returns `1618` (retry) instead of failing
 
 ## ⚙️ How it works
@@ -28,9 +30,10 @@ No Store Local Experience Packs, no Administrative Template policies that lock u
 | 4 | SYSTEM | `Copy-UserInternationalSettingsToSystem` to the Welcome screen and new user profiles |
 | 5 | User | For every signed-in user: one-time scheduled task that sets language list, display language, regional format and country/region |
 | 6 | SYSTEM | Detection marker in the registry |
-| 7 | Intune | Exit code `3010`, restart with the Intune restart grace period. Exit code `1618` if the installation has to be retried |
+| 7 | SYSTEM | Restart reminder, only if a user is signed in and `-InitialSetup` is not set: popup task for all users, cleanup task at the next startup, optional enforced restart task |
+| 8 | Intune | Exit code `0` with restart reminder, otherwise `3010`. Exit code `1618` if the installation has to be retried |
 
-If nobody is signed in, step 5 is skipped. The first user who signs in after the restart gets the settings from step 4.
+If nobody is signed in, steps 5 and 7 are skipped. The first user who signs in after the restart gets the settings from step 4.
 
 ## 📋 Requirements
 
@@ -58,6 +61,14 @@ Before packaging, adjust the configuration block at the top of the script. These
 | `$ServicingWaitMinutes` | `10` | Maximum wait time for running servicing operations before `Install-Language` |
 | `$ServicingCheckIntervalSeconds` | `30` | Check interval while waiting |
 | `$ServicingProcessNames` | `TiWorker` | Processes that indicate an active servicing operation |
+| `$PopupFileName` | `LanguageRestartPopup.ps1` | Popup script, must be in the package next to `Set-DeviceLanguage.ps1` |
+| `$ReminderRegPath` | `<MarkerKeyPath>\RestartReminder` | Schedule, texts and colors for the popup |
+| `$TaskPath` | `\DeviceLanguage\` | Task Scheduler folder for the reminder tasks |
+| `$FinalPhaseMinutes` | `15` | With an enforced restart: during the last X minutes the popup can no longer be hidden |
+| `$CompanyName` | `IT Department` | Shown below the popup title. Set this to your company or IT team |
+| `$AccentColor` / `$FinalAccentColor` | `#0078D4` / `#C42B1C` | Icon, progress bar and button color, normal and final phase |
+| `$TitleText`, `$MessageText`, `$CountdownLabelText`, `$HintText`, `$ButtonNowText`, `$ButtonLaterText`, `$RestartingText` | English texts | Popup texts. `{0}` in `$MessageText` is the language name, `{0}` in `$HintText` the restart time. ASCII only |
+| `$ShutdownComment` | `Restart to apply the new Windows display language.` | Comment of the restart, visible in the System event log (event ID 1074) |
 
 ## 🎛️ Parameters
 
@@ -66,7 +77,10 @@ Before packaging, adjust the configuration block at the top of the script. These
 | `-Language` | Yes | `en-US` | Display language to install and apply |
 | `-Culture` | No | `de-AT` | Regional format for date, time, numbers and currency. Defaults to `-Language` |
 | `-GeoId` | No | `14` | Country or region. `0` or not set leaves it unchanged |
-| `-InitialSetup` | No | | Use for the Autopilot app. Writes the `InitialLanguage` marker in addition to `Language` |
+| `-InitialSetup` | No | | Use for the Autopilot app. Writes the `InitialLanguage` marker in addition to `Language`. No restart reminder |
+| `-RestartDeadlineMinutes` | No | `240` | Enforces the restart after X minutes and shows a countdown in the popup. `0` or not set = reminder only, Windows never restarts automatically |
+| `-ReminderIntervalMinutes` | No | `30` | "Remind me later" hides the popup for X minutes. Minimum `5`, default `30` |
+| `-NoRestartReminder` | No | | No popup, the script returns `3010` and Intune shows its own restart notification |
 
 ### Language, Culture and GeoId explained
 
@@ -103,7 +117,13 @@ Common GeoIds: Austria `14`, Germany `94`, Switzerland `223`, United States `244
 
 ## 📦 Packaging
 
-Put only the script into a source folder and create the `.intunewin` file:
+Put both scripts into a source folder and create the `.intunewin` file:
+
+```
+Source\
+  Set-DeviceLanguage.ps1
+  LanguageRestartPopup.ps1
+```
 
 ```
 IntuneWinAppUtil.exe -c .\Source -s Set-DeviceLanguage.ps1 -o .\Output
@@ -123,7 +143,7 @@ Sets the language during device setup, before the first user signs in.
 | Uninstall command | `reg.exe delete "HKLM\SOFTWARE\CompanyName\DeviceLanguage" /v InitialLanguage /f /reg:64` |
 | Install behavior | System |
 | Device restart behavior | Determine behavior based on return codes |
-| Return codes | `3010` = Soft reboot, `1618` = Retry (both default) |
+| Return codes | `0` = Success, `3010` = Soft reboot, `1618` = Retry (all default) |
 | Installation time required | `90` minutes (download plus servicing wait) |
 | Detection rule | Registry, key `HKEY_LOCAL_MACHINE\SOFTWARE\CompanyName\DeviceLanguage`, value `InitialLanguage`, string comparison, equals `de-DE` |
 | 32-bit app on 64-bit clients | No |
@@ -144,13 +164,19 @@ One app per language, all based on the same package. Users pick their language i
 | Install behavior | System |
 | Allow available uninstall | No |
 | Device restart behavior | Determine behavior based on return codes |
-| Return codes | `3010` = Soft reboot, `1618` = Retry (both default) |
+| Return codes | `0` = Success, `3010` = Soft reboot, `1618` = Retry (all default) |
 | Installation time required | `90` minutes (download plus servicing wait) |
 | Detection rule | Registry, key `HKEY_LOCAL_MACHINE\SOFTWARE\CompanyName\DeviceLanguage`, value `Language`, string comparison, equals `en-US` |
 | 32-bit app on 64-bit clients | No |
 | Assignment | Available, user group |
 
-Tip for the app description: *"Changes the Windows display language. The download can take up to 20 minutes, a restart is required afterwards."*
+Ready-to-use app descriptions are in the section **Company Portal app descriptions** below.
+
+To enforce the restart, for example 4 hours after the installation, add `-RestartDeadlineMinutes 240` to the install command:
+
+```
+%windir%\SysNative\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -File .\Set-DeviceLanguage.ps1 -Language "en-US" -Culture "de-AT" -GeoId 14 -RestartDeadlineMinutes 240
+```
 
 ### Example app set
 
@@ -164,6 +190,114 @@ Tip for the app description: *"Changes the Windows display language. The downloa
 | Jazyk Windows: Čeština | `-Language "cs-CZ" -Culture "de-AT" -GeoId 14` |
 | Windows nyelv: Magyar | `-Language "hu-HU" -Culture "de-AT" -GeoId 14` |
 | Windows 语言: 中文 (简体) | `-Language "zh-CN" -Culture "de-AT" -GeoId 14` |
+
+## 🔁 Restart reminder
+
+After a Company Portal install the user sees a popup in the bottom right corner, in the same style as the [RebootReminder](../../Remediations/RebootReminder). It follows the Windows light or dark theme.
+
+| Mode | Install command | Behavior |
+|---|---|---|
+| Reminder only (default) | no extra parameter | "Restart now" and "Remind me later". After "later" the popup comes back after `-ReminderIntervalMinutes` (default 30) and at every sign-in, until the device is restarted. Windows never restarts on its own |
+| Enforced restart | `-RestartDeadlineMinutes 240` | Same popup with a live countdown. During the last `$FinalPhaseMinutes` it turns red and can no longer be hidden. At the deadline a SYSTEM task restarts the device |
+| No reminder | `-NoRestartReminder` | Returns `3010`, Intune shows its own restart notification |
+
+How it works:
+
+- `LanguageRestartPopup.ps1` is copied to `%ProgramData%\DeviceLanguage` (SYSTEM and Administrators full control, Users read and execute only)
+- Schedule, texts and colors are written to `<MarkerKeyPath>\RestartReminder`
+- Task Scheduler folder `\DeviceLanguage\`:
+
+| Task | Runs as | Purpose |
+|---|---|---|
+| `LanguageRestart-Popup` | BUILTIN\Users | Shows the popup in every signed-in session, right away, again every `-ReminderIntervalMinutes` as a safety net, and at sign-in. A mutex keeps it to one popup per session |
+| `LanguageRestart-EnforcedRestart` | SYSTEM | Only with `-RestartDeadlineMinutes`. Restarts the device at the deadline, or as soon as possible if the device was off. Does nothing if the device restarted in the meantime |
+| `LanguageRestart-Cleanup` | SYSTEM | Runs at the next startup and removes all three tasks, the registry state and the popup script |
+
+Installing another language while a reminder is active replaces the previous reminder.
+
+## 🗒️ Company Portal app descriptions
+
+Copy and paste for the **Description** field of each app. The texts assume `-Culture "de-AT" -GeoId 14` as in the [example app set](#example-app-set). Adjust the sentence about date and number formats if you use other values.
+
+**Windows-Sprache: Deutsch**
+
+```
+Switches the Windows display language to German (Germany). Menus, dialogs, the Settings app and most Microsoft apps will show in German. Date, time and number formats stay in Austrian format.
+
+The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
+
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+```
+
+**Windows Language: English (US)**
+
+```
+Switches the Windows display language to English (United States). Menus, dialogs, the Settings app and most Microsoft apps will show in English. Date, time and number formats stay in Austrian format.
+
+The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
+
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+```
+
+**Windows Language: English (UK)**
+
+```
+Switches the Windows display language to English (United Kingdom). Menus, dialogs, the Settings app and most Microsoft apps will show in English. Date, time and number formats stay in Austrian format.
+
+The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
+
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+```
+
+**Windows-taal: Nederlands**
+
+```
+Switches the Windows display language to Dutch (Netherlands). Menus, dialogs, the Settings app and most Microsoft apps will show in Dutch. Date, time and number formats stay in Austrian format.
+
+The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
+
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+```
+
+**Jazyk Windows: Slovenčina**
+
+```
+Switches the Windows display language to Slovak (Slovakia). Menus, dialogs, the Settings app and most Microsoft apps will show in Slovak. Date, time and number formats stay in Austrian format.
+
+The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
+
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+```
+
+**Jazyk Windows: Čeština**
+
+```
+Switches the Windows display language to Czech (Czechia). Menus, dialogs, the Settings app and most Microsoft apps will show in Czech. Date, time and number formats stay in Austrian format.
+
+The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
+
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+```
+
+**Windows nyelv: Magyar**
+
+```
+Switches the Windows display language to Hungarian (Hungary). Menus, dialogs, the Settings app and most Microsoft apps will show in Hungarian. Date, time and number formats stay in Austrian format.
+
+The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
+
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+```
+
+**Windows 语言: 中文 (简体)**
+
+```
+Switches the Windows display language to Chinese (Simplified, China). Menus, dialogs, the Settings app and most Microsoft apps will show in Chinese. Date, time and number formats stay in Austrian format.
+
+The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
+
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+```
 
 ## 🔍 Detection logic
 
@@ -193,7 +327,8 @@ The log is appended on every run and is included in Intune "Collect diagnostics"
 
 | Exit code | Meaning |
 |---|---|
-| `3010` | Success, restart required |
+| `0` | Success, restart reminder is shown to the user |
+| `3010` | Success, restart required and handled by Intune (Autopilot, nobody signed in, `-NoRestartReminder`, or the reminder setup failed) |
 | `1618` | Retry: reboot pending, servicing still busy after `$ServicingWaitMinutes`, or `Install-Language` failed. Intune retries the installation |
 | `1` | Prerequisite check failed, or system settings or the detection marker could not be applied |
 
@@ -205,7 +340,9 @@ A failing user part is logged as an error but does not fail the app. The system 
 - **Time zone** is not touched on purpose. Use the Settings Catalog policy *Time Language Settings > Configure Time Zone* or keep automatic time zone detection.
 - **Shared devices:** Welcome screen, system locale and defaults for new profiles apply to everybody on the device.
 - **Download time:** `Install-Language` can take up to 20 minutes, on a freshly enrolled device with parallel updates up to 45 minutes. During the ESP the display language may switch a few times before it settles.
-- **Restart:** the display language only takes effect after a restart or sign-out. Intune handles this through return code `3010`.
+- **Restart:** the display language takes effect after a sign-out, system locale and Welcome screen only after a restart. That is why the reminder asks for a restart.
+- **Fast Startup:** "Shut down" and power on is not a restart when Fast Startup is enabled. The popup keeps reminding until the user picks "Restart".
+- **RebootReminder:** if the [RebootReminder](../../Remediations/RebootReminder) popup is active in the same session, the language popup stays hidden. One restart covers both.
 - **Enterprise State Roaming** can bring previously used languages back to the user's language list.
 - **Wipe and reset:** installed language packs survive an Intune wipe, the device may come back in the last configured language.
 - **Localized account names:** a non-English system localizes built-in account names. Use SIDs instead of names in scripts and policies.
@@ -223,6 +360,8 @@ A failing user part is logged as an error but does not fail the app. The system 
 | User settings not applied | Log shows the result of the scheduled task for that user |
 | Autopilot app reinstalls after a user change | Detection rule of the Autopilot app uses `InitialLanguage`, not `Language` |
 | Detection never succeeds | "Associated with a 32-bit app on 64-bit clients" is set to No |
+| No popup after the installation | Log shows "Restart reminder" lines. `LanguageRestartPopup.ps1` must be in the package. Popup log: `%TEMP%\LanguageRestartPopup.log` of the user |
+| Popup still shows after a restart | Device was shut down with Fast Startup instead of restarted. Tasks under `\DeviceLanguage\` are removed at the next real startup |
 
 ## 👤 Author
 
