@@ -36,24 +36,133 @@ The package comes in two variants:
 
 ## How the HKCU variant works
 
-Intune can run a remediation for exactly the users it is assigned to, but only with the **logged-on credentials**. A script running as SYSTEM never learns which user an assignment was meant for. Standard users, on the other hand, only have read access to `HKCU\Software\Policies`, so a script with the logged-on credentials cannot write an Edge policy. Local admins don't help either, because Intune runs user scripts with the filtered UAC token.
+### In short
 
-The HKCU variant therefore splits the work:
+The HKCU variant always consists of **one merge remediation** plus **one set remediation per group of favorites**:
 
-1. **Set remediations** (one per favorites set) run with the logged-on credentials and are assigned to **user groups**. Each one writes its set to the staging key in the profile of the user:  
-   `HKCU:\<RegistryBasePath>\Sets\<SetName>`  
-   A user who is not in the group never gets the set.
-2. **One merge remediation** runs as SYSTEM and is assigned to the **devices**. It goes through every loaded user profile below `HKEY_USERS` (local, Active Directory and Entra ID accounts), reads only the sets of that user, removes stale sets, merges the rest and writes the result to the Edge user policy of that user:  
-   `HKEY_USERS\<SID>\Software\Policies\Microsoft\Edge\ManagedFavorites`
+| | Merge remediation | Set remediation |
+| --- | --- | --- |
+| Scripts | `EdgeManagedFavorites_HKCU_Merge_Detect.ps1`<br>`EdgeManagedFavorites_HKCU_Merge_Remediate.ps1` | `EdgeManagedFavorites_HKCU_Set_Detect.ps1`<br>`EdgeManagedFavorites_HKCU_Set_Remediate.ps1` |
+| How many | **Exactly one** in the tenant | **One per group of favorites**, also for the favorites that everyone gets |
+| Contains favorites | No, it only has path parameters | Yes, `$Favorites` of this set |
+| Runs as | SYSTEM | The signed-in user |
+| Assign to | All devices | The users who should get this set |
+| Job | Writes the Edge policy of every user from the sets of that user | Decides **who** gets **which** favorites |
+
+Both parts are always needed:
+
+- **Merge without sets:** nobody gets favorites, because the merge remediation has none of its own.
+- **Sets without merge:** the favorites are only stored in the user profile and never reach Edge.
+
+### Why there are two parts
+
+Two Windows and Intune rules work against each other:
+
+1. **Only SYSTEM can write the Edge user policy.** Standard users only have read access to `HKCU\Software\Policies`. A script that runs with the logged-on credentials cannot write the policy. Local admins don't help either, because Intune runs user scripts with the filtered UAC token.
+2. **Only the user context knows who an assignment is for.** When a remediation is assigned to a user group and runs as SYSTEM, the script does not learn which user the assignment was meant for. With the logged-on credentials it simply only runs for the users in the group.
+
+No single script can do both, so the work is split:
+
+- The **set remediation** runs as the user and writes its set to the staging key in the profile of that user: `HKCU:\<RegistryBasePath>\Sets\<SetName>`. A user who is not in the assigned group never gets the set.
+- The **merge remediation** runs as SYSTEM, goes through every loaded user profile below `HKEY_USERS` (local, Active Directory and Entra ID accounts), reads **only the sets of that user**, removes stale sets, merges the rest and writes the result to the Edge user policy of that user: `HKEY_USERS\<SID>\Software\Policies\Microsoft\Edge\ManagedFavorites`.
+
+### Example: company with two branches and an IT team
+
+Requirements:
+
+- Everyone gets the intranet and the help desk.
+- Users in the Vienna branch also get the Vienna room booking, users in the Graz branch the Graz room booking.
+- IT admins also get the admin portals.
+- All favorites appear in one Edge folder called **Company Favorites**.
+
+You create **five remediations** in Intune:
+
+| Remediation in Intune | Scripts | `$SetName` | Content of `$Favorites` | Assignment | Logged-on credentials |
+| --- | --- | --- | --- | --- | --- |
+| Edge Favorites - Merge | `HKCU_Merge_*` | (none) | (none) | All devices | **No** |
+| Edge Favorites - General | `HKCU_Set_*` | `General` | Intranet, Help Desk | All users | **Yes** |
+| Edge Favorites - Vienna | `HKCU_Set_*` | `Vienna` | Room Booking Vienna | User group Vienna | **Yes** |
+| Edge Favorites - Graz | `HKCU_Set_*` | `Graz` | Room Booking Graz | User group Graz | **Yes** |
+| Edge Favorites - IT | `HKCU_Set_*` | `IT` | Intune, Entra, Defender | User group IT admins | **Yes** |
+
+The Parameters block of the set remediation **General** (Detect and Remediate contain the same block):
+
+```powershell
+$SetName          = "General"
+$TopLevelName     = "Company Favorites"
+$Favorites = @(
+    @{ Path = "";         Name = "Intranet";  Url = "https://intranet.example.com" }
+    @{ Path = "";         Name = "Help Desk"; Url = "https://helpdesk.example.com" }
+)
+$RemoveSet        = $false
+$RegistryBasePath = "Software\YourCompany\EdgeManagedFavorites"
+$StaleAfterDays   = 30
+$RefreshAfterDays = 7
+```
+
+The set remediation **Vienna** only differs in `$SetName` and `$Favorites`:
+
+```powershell
+$SetName          = "Vienna"
+$TopLevelName     = "Company Favorites"
+$Favorites = @(
+    @{ Path = "Vienna"; Name = "Room Booking"; Url = "https://rooms-vienna.example.com" }
+)
+$RemoveSet        = $false
+$RegistryBasePath = "Software\YourCompany\EdgeManagedFavorites"
+$StaleAfterDays   = 30
+$RefreshAfterDays = 7
+```
+
+**Graz** and **IT** follow the same pattern. The **merge** remediation only contains the paths, `$RegistryBasePath` and `$StaleAfterDays` are the same values as in every set:
+
+```powershell
+$RegistryBasePath = "Software\YourCompany\EdgeManagedFavorites"
+$StaleAfterDays   = 30
+$EdgePolicyPath   = "Software\Policies\Microsoft\Edge"
+$EdgePolicyName   = "ManagedFavorites"
+```
+
+**What every user gets.** Anna and Chris share one PC in Vienna:
+
+| User | Groups | Sets in the own profile | Edge shows |
+| --- | --- | --- | --- |
+| Anna | Vienna | General, Vienna | Intranet, Help Desk, Vienna folder |
+| Chris | Vienna, IT admins | General, Vienna, IT | Intranet, Help Desk, Vienna folder, admin portals |
+| Ben | Graz | General, Graz | Intranet, Help Desk, Graz folder |
+
+Chris sees this tree in Edge, Anna sees the same tree without **Admin Portals**, although both use the same PC:
 
 ```text
-User A (groups General, IT)               User B (group General)
-HKCU\...\Sets\General                     HKCU\...\Sets\General
-HKCU\...\Sets\IT
-        │                                         │
-        ▼  merge remediation (SYSTEM)             ▼
-User A: Edge policy with General + IT     User B: Edge policy with General only
+Company Favorites
+├── Admin Portals
+│   ├── Security
+│   │   └── Defender
+│   ├── Entra
+│   └── Intune
+├── Vienna
+│   └── Room Booking
+├── Help Desk
+└── Intranet
 ```
+
+**What happens on the PC when Anna signs in:**
+
+1. Intune runs the set remediations **General** and **Vienna** for Anna (she is in both groups). They write `General` and `Vienna` to `HKCU:\Software\YourCompany\EdgeManagedFavorites\Sets` of Anna. **IT** and **Graz** do not run for her.
+2. Within the next hour the merge remediation runs as SYSTEM. It finds the profile of Anna, merges her two sets and writes the result to her Edge user policy.
+3. Edge picks up the policy without a restart.
+
+When Chris signs in on the same PC, the same happens with his three sets in his own profile. The two users never see each other's sets.
+
+### Common changes
+
+| Task | What to do |
+| --- | --- |
+| New branch, for example Linz | Create one more set remediation with `$SetName = "Linz"` and assign it to the user group Linz. The merge remediation stays as it is |
+| Change the favorites of a set | Change `$Favorites` in the Detect and Remediate script of that set remediation. The change reaches Edge with the next merge run |
+| User moves from Vienna to Graz | Change the group membership. Graz is added on the next run of the Graz set remediation. Vienna is no longer refreshed and the merge remediation removes it after `$StaleAfterDays` days |
+| Remove a set from all users right away | Set `$RemoveSet = $true` in that set remediation and keep it assigned until it ran for the users |
+| Branch defined by devices, not by users | Assign the set remediation to a device group instead of a user group. Then every user who signs in on these devices gets the set |
 
 **The staging key belongs to the user.** Users can change their own staging key and thereby add favorites to their own managed favorites. This never affects other users. The merge remediation treats the staging key as untrusted input: a set with invalid content is skipped and named in the output, the other sets of that user and all other users are processed normally.
 
