@@ -1,9 +1,17 @@
 # 📦 Win32 Apps
 
-This folder contains Intune Win32 app packages, each with its script and a README, packaged with IntuneWinAppUtil.
+Intune **Win32 app** packages. Every folder contains the scripts and a README, and is packaged with IntuneWinAppUtil.
+
+## 📦 Apps
 
 | App | Description |
 |---|---|
-| [Set-DeviceLanguage](./Set-DeviceLanguage/) | Switch Windows 11 display language, regional format and country/region for Autopilot and Company Portal |
+| [🌍 Set-DeviceLanguage](./Set-DeviceLanguage/) | Switches the Windows 11 display language, regional format and country/region, for Autopilot and the Company Portal, with a restart reminder popup |
 
-Blog: [headsinthecloud.blog](https://headsinthecloud.blog)
+## 👤 Author
+
+**Daniel Fraubaum**  
+Blog: [headsinthecloud.blog](https://headsinthecloud.blog)  
+LinkedIn: [daniel-fraubaum](https://www.linkedin.com/in/daniel-fraubaum-b352ba1aa/)
+
+Use at your own risk. Test in a pilot group before rolling out broadly.

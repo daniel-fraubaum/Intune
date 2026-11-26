@@ -385,8 +385,8 @@ A failing user part is logged as an error but does not fail the app. The system 
 
 ## 👤 Author
 
-**Daniel Fraubaum**
-Blog: [headsinthecloud.blog](https://headsinthecloud.blog)
+**Daniel Fraubaum**  
+Blog: [headsinthecloud.blog](https://headsinthecloud.blog)  
 LinkedIn: [daniel-fraubaum](https://www.linkedin.com/in/daniel-fraubaum-b352ba1aa/)
 
 Use at your own risk. Test in a pilot group before rolling out broadly.
