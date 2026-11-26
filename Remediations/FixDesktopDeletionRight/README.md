@@ -134,15 +134,6 @@ The output contains `BUILTIN\Users:(DC)` (`VORDEFINIERT\Benutzer:(DC)` on a Germ
 
 ---
 
-## Changelog
-
-| Version | Date | Change |
-| --- | --- | --- |
-| 1.1 | 2026-11-26 | Only `DC` on the folder instead of `FullControl` with `/T` (fixes junction privilege escalation and items with broken inheritance), junction check, log in the IME log folder (part of Collect diagnostics), log rotation |
-| 1.0 | 2026-11-26 | First version |
-
----
-
 ## Disclaimer
 
 These scripts are provided as-is. Test thoroughly in a non-production environment before broad deployment.

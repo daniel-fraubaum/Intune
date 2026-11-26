@@ -116,15 +116,6 @@ Secure Score and the Defender recommendations update with a delay after the valu
 
 ---
 
-## Changelog
-
-| Version | Date | Change |
-| --- | --- | --- |
-| 1.1 | 2026-11-26 | One policy path (`WOW6432Node\Policies` is the same key), 2017 entries removed, log in the IME log folder (part of Collect diagnostics) with one line per value, detection lists all wrong values |
-| 1.0 | 2026-11-26 | First version |
-
----
-
 ## Disclaimer
 
 These scripts are provided as-is. Test thoroughly in a non-production environment before broad deployment.
