@@ -2,7 +2,7 @@
     Script:      Detect_EdgeManagedFavorites_HKCU_Set.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.5
+    Version:     1.6
     Date:        2026-11-26
     Description: Checks the favorites set of this remediation in the staging key of the signed-in user
                  (HKCU). Runs with the logged-on credentials, so every user only gets the sets of the

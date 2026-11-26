@@ -2,7 +2,7 @@
     Script:      Remediate_EdgeManagedFavorites_HKCU_Merge.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.5
+    Version:     1.6
     Date:        2026-11-26
     Description: Rebuilds the Microsoft Edge ManagedFavorites user policy of every loaded user profile
                  from the favorites sets in the staging key of that profile and removes stale sets.

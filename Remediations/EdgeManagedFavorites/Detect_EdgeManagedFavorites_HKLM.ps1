@@ -2,7 +2,7 @@
     Script:      Detect_EdgeManagedFavorites_HKLM.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.5
+    Version:     1.6
     Date:        2026-11-26
     Description: Checks whether the favorites set of this remediation is present and current in
                  the staging key and whether the Microsoft Edge ManagedFavorites policy (HKLM)
@@ -261,7 +261,8 @@ try {
         Write-Output "Not compliant: $($Issues -join "; ")."
         exit 1
     }
-    Write-Output "Compliant: set ""$SetName"" current, merged sets: $(@($EffectiveSets | ForEach-Object { $_.Name }) -join ", ")."
+    $OwnState = if ($RemoveSet) { "not present" } else { "current" }
+    Write-Output "Compliant: set ""$SetName"" $OwnState, merged sets: $(@($EffectiveSets | ForEach-Object { $_.Name }) -join ", ")."
     exit 0
 }
 catch {
