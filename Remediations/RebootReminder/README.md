@@ -94,7 +94,7 @@ Adjust the Parameters block at the top of the scripts before you upload them.
 | Variable | Default | Description |
 |---|---|---|
 | `$MaxUptimeDays` | `7` | Uptime in days that triggers the reminder. Must be the same in both scripts |
-| `$OrgPrefix` | `"headsinthecloud.blog"` | Used for the registry key, the Program Files folder and the Task Scheduler folder. Must be the same in both scripts |
+| `$OrgPrefix` | `"CompanyName"` | Your company name. Used for the registry key, the Program Files folder and the Task Scheduler folder. Must be the same in both scripts |
 | `$TestUptimeDays` | `$null` | Testing only: fakes the uptime in days. Set to `$null` for production |
 
 ### Detection script only
@@ -172,7 +172,7 @@ Test on a **VM or a test device**. The device **will restart**.
    psexec -s C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Temp\Remediate_RebootReminder.ps1
    ```
 
-4. The popup appears in the bottom right corner within a few seconds. Check the tasks under `\headsinthecloud.blog\` in Task Scheduler.
+4. The popup appears in the bottom right corner within a few seconds. Check the tasks under `\CompanyName\` in Task Scheduler.
 5. After 5 minutes the SYSTEM task reboots the device.
 6. After the reboot, run the detection script the same way to verify the cleanup (tasks and registry key removed):
 
@@ -196,9 +196,9 @@ With `$CountdownMinutes = 5` the countdown is shorter than `$FinalPhaseMinutes` 
 
 State and tasks for troubleshooting (default `$OrgPrefix`):
 
-- Registry: `HKLM:\SOFTWARE\headsinthecloud.blog\RebootReminder`
-- Task Scheduler: `\headsinthecloud.blog\RebootReminder-EnforcedReboot` and `\headsinthecloud.blog\RebootReminder-Popup`
-- Popup script: `C:\Program Files\headsinthecloud.blog\RebootReminder\RebootReminderPopup.ps1`
+- Registry: `HKLM:\SOFTWARE\CompanyName\RebootReminder`
+- Task Scheduler: `\CompanyName\RebootReminder-EnforcedReboot` and `\CompanyName\RebootReminder-Popup`
+- Popup script: `C:\Program Files\CompanyName\RebootReminder\RebootReminderPopup.ps1`
 
 | Exit code | Meaning |
 |---|---|
@@ -208,7 +208,7 @@ State and tasks for troubleshooting (default `$OrgPrefix`):
 ## ⚠️ Good to know
 
 - **Devices restart.** Tell your users before you roll this out and test on a pilot group first.
-- **Popup in Program Files.** Standard users can create folders in `C:\ProgramData` and then own them. A user could create the popup folder there in advance and swap the popup script, which runs in the session of every signed-in user. `C:\Program Files` does not allow that. Earlier versions used `C:\ProgramData\<OrgPrefix>\RebootReminder`, that folder is no longer used and can be deleted.
+- **Popup in Program Files.** Standard users can create folders in `C:\ProgramData` and then own them. A user could create the popup folder there in advance and swap the popup script, which runs in the session of every signed-in user. `C:\Program Files` does not allow that.
 - **Same values in both scripts.** `$MaxUptimeDays` and `$OrgPrefix` must match, otherwise detection and remediation look at different limits, keys and tasks.
 - **Testing values.** `$TestUptimeDays` must be `$null` in production. Left set in the detection script, the device never becomes compliant and reboots every day.
 - **ASCII only texts.** Windows PowerShell 5.1 reads scripts without a BOM as ANSI, so non-ASCII characters in the popup texts break.

@@ -50,7 +50,7 @@ Adjust the Parameters block at the top of the scripts before you upload them.
 | `$PackageName` | `Microsoft.CompanyPortal` | Package name, used to skip devices without Company Portal and to find the app logo. Must be the same in both scripts |
 | `$AppUserModelId` | `Microsoft.CompanyPortal_8wekyb3d8bbwe!App` | AUMID of the Company Portal app. Must be the same in both scripts |
 | `$StartMenuPath` | `%ProgramData%\Microsoft\Windows\Start Menu\Programs` | All Users Start Menu folder. Must be the same in both scripts |
-| `$IconFolder` | `%ProgramFiles%\CompanyPortalSearchShortcut` | Folder for the extracted `CompanyPortal.ico`. Must be the same in both scripts |
+| `$IconFolder` | `%ProgramFiles%\CompanyName\CompanyPortalSearchShortcut` | Folder for the extracted `CompanyPortal.ico`. Replace `CompanyName` with your company name. Must be the same in both scripts |
 
 You can check the AUMID on a client with:
 
@@ -80,7 +80,7 @@ Intune admin center > **Devices** > **Scripts and remediations** > **Remediation
    psexec -s C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Temp\Remediate_CompanyPortalSearchShortcut.ps1
    ```
 
-2. Check that `%ProgramData%\Microsoft\Windows\Start Menu\Programs\Intune Company Portal.lnk` and `%ProgramFiles%\CompanyPortalSearchShortcut\CompanyPortal.ico` exist.
+2. Check that `%ProgramData%\Microsoft\Windows\Start Menu\Programs\Intune Company Portal.lnk` and `%ProgramFiles%\CompanyName\CompanyPortalSearchShortcut\CompanyPortal.ico` exist.
 3. Run `Detect_CompanyPortalSearchShortcut.ps1` the same way. It returns `Compliant: ... present and correct`.
 4. Type `company`, `intune` or `portal` in Start search. The Company Portal shows up with its own icon and opens on click.
 
@@ -95,13 +95,13 @@ The scripts write no log file. The output is in the Intune admin center, device 
 
 ## ⚠️ Good to know
 
-- **Icon in Program Files.** Standard users can create folders in `C:\ProgramData` and then own them, for example as a junction to another folder, so SYSTEM would write the icon there. `C:\Program Files` does not allow that, and the remediation never writes the icon through a junction. Earlier versions used `%ProgramFiles%\CompanyPortalSearchShortcut`. Existing shortcuts are recreated with the new icon path on the next run, the old folder can be deleted.
+- **Icon in Program Files.** Standard users can create folders in `C:\ProgramData` and then own them, for example as a junction to another folder, so SYSTEM would write the icon there. `C:\Program Files` does not allow that, and the remediation never writes the icon through a junction.
 - **Two entries in All apps.** Users see both `Intune Company Portal` and `Unternehmensportal` in the app list. Both open the same app.
 - **Why Explorer.** A shortcut that targets `shell:AppsFolder\...` directly (without `explorer.exe`) is broken when created with `WScript.Shell`: no icon, and Explorer restarts on every launch. An earlier version of this package did that. The current scripts detect such a shortcut and replace it automatically.
 - **Icon cache.** If Start still shows the old icon after the update, sign out and back in.
 - **Search delay.** A new shortcut can take a few seconds until Start search picks it up.
 - **Windows 10.** Some Windows 10 builds had a known issue where Start search did not return `.lnk` files at all. Windows 11 is not affected.
-- **Removal.** Unassigning the remediation does not delete the shortcut. Remove `Intune Company Portal.lnk` from the All Users Start Menu and the `%ProgramFiles%\CompanyPortalSearchShortcut` folder if you want it gone.
+- **Removal.** Unassigning the remediation does not delete the shortcut. Remove `Intune Company Portal.lnk` from the All Users Start Menu and the `%ProgramFiles%\CompanyName\CompanyPortalSearchShortcut` folder if you want it gone.
 
 ## 🛠️ Troubleshooting
 

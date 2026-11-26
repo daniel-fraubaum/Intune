@@ -53,7 +53,7 @@ $ShutdownComment = "Scheduled maintenance restart by IT."
 $TestUptimeDays = $null
 
 # Used for registry key, Program Files folder and Task Scheduler folder
-$OrgPrefix = "headsinthecloud.blog"
+$OrgPrefix = "CompanyName"
 # Program Files, not ProgramData: standard users can create folders in ProgramData and would own them
 $BasePath = "$env:ProgramFiles\$OrgPrefix\RebootReminder"
 $PopupFile = "$BasePath\RebootReminderPopup.ps1"

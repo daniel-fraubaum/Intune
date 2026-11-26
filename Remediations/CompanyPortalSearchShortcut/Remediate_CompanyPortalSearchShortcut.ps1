@@ -15,7 +15,7 @@ $PackageName    = "Microsoft.CompanyPortal"
 $AppUserModelId = "Microsoft.CompanyPortal_8wekyb3d8bbwe!App"
 $StartMenuPath  = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs"
 # Program Files, not ProgramData: standard users can create folders in ProgramData and would own them
-$IconFolder     = "$env:ProgramFiles\CompanyPortalSearchShortcut"
+$IconFolder     = "$env:ProgramFiles\CompanyName\CompanyPortalSearchShortcut"
 
 # ==== Logic ====
 try {

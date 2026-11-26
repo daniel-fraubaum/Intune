@@ -2,8 +2,8 @@
 Script:      Detect_RebootReminder.ps1
 Author:      Daniel Fraubaum
 Blog:        https://headsinthecloud.blog
-Version:     1.0
-Date:        2026-11-18
+Version:     1.2
+Date:        2026-11-26
 Description: Intune Remediation detection script (run as SYSTEM, 64-bit).
              Checks the device uptime against $MaxUptimeDays.
              Exit 0 = compliant or reboot already scheduled for this boot session.
@@ -25,7 +25,7 @@ $OverdueGraceMinutes = 15
 $TestUptimeDays = $null
 
 # Used for registry key, Program Files folder and Task Scheduler folder
-$OrgPrefix = "headsinthecloud.blog"
+$OrgPrefix = "CompanyName"
 $RegPath = "HKLM:\SOFTWARE\$OrgPrefix\RebootReminder"
 $TaskPath = "\$OrgPrefix\"
 $PopupTaskName = "RebootReminder-Popup"

@@ -66,7 +66,7 @@ $InitialMarkerValueName = "InitialLanguage"
 
 # Working folder for the temporary user script and the restart reminder popup
 # Program Files, not ProgramData: standard users can create folders in ProgramData and would own them
-$WorkingFolder = "$env:ProgramFiles\DeviceLanguage"
+$WorkingFolder = "$env:ProgramFiles\CompanyName\DeviceLanguage"
 
 # Log file (IME log folder, collected with "Collect diagnostics")
 $LogFile = "$env:ProgramData\Microsoft\IntuneManagementExtension\Logs\Set-DeviceLanguage.log"
