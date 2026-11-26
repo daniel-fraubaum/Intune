@@ -2,8 +2,8 @@
 Script:      Remediate_RebootReminder.ps1
 Author:      Daniel Fraubaum
 Blog:        https://headsinthecloud.blog
-Version:     1.1
-Date:        2026-11-18
+Version:     1.2
+Date:        2026-11-26
 Description: Intune Remediation script (run as SYSTEM, 64-bit).
              1. Registers a one-time SYSTEM task that enforces the reboot after $CountdownMinutes.
              2. Deploys a modern WPF popup (bottom right, light/dark aware, live countdown) and starts it
@@ -52,9 +52,10 @@ $ShutdownComment = "Scheduled maintenance restart by IT."
 # Testing only: fake uptime in days (e.g. 10). Set to $null for production
 $TestUptimeDays = $null
 
-# Used for registry key, ProgramData folder and Task Scheduler folder
+# Used for registry key, Program Files folder and Task Scheduler folder
 $OrgPrefix = "headsinthecloud.blog"
-$BasePath = "$env:ProgramData\$OrgPrefix\RebootReminder"
+# Program Files, not ProgramData: standard users can create folders in ProgramData and would own them
+$BasePath = "$env:ProgramFiles\$OrgPrefix\RebootReminder"
 $PopupFile = "$BasePath\RebootReminderPopup.ps1"
 $RegPath = "HKLM:\SOFTWARE\$OrgPrefix\RebootReminder"
 $TaskPath = "\$OrgPrefix\"
@@ -463,6 +464,12 @@ try {
 
     # Step 5: Deploy popup script with a locked down ACL (users read and execute only)
     if (-not (Test-Path -Path $BasePath)) { New-Item -Path $BasePath -ItemType Directory -Force | Out-Null }
+    # Never write through a link or into a folder that SYSTEM, Administrators or TrustedInstaller do not own
+    $TrustedOwners = @("S-1-5-18", "S-1-5-32-544", "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464")
+    $BaseOwner = (Get-Acl -LiteralPath $BasePath).GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+    if (((Get-Item -LiteralPath $BasePath -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) -or ($TrustedOwners -notcontains $BaseOwner)) {
+        throw "$BasePath is a link or not owned by SYSTEM or Administrators (owner $BaseOwner), popup not deployed"
+    }
     $Acl = New-Object System.Security.AccessControl.DirectorySecurity
     $Acl.SetAccessRuleProtection($true, $false)
     $Inheritance = [System.Security.AccessControl.InheritanceFlags]"ContainerInherit, ObjectInherit"

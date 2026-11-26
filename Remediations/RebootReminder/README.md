@@ -43,7 +43,7 @@ During the last 15 minutes (`$FinalPhaseMinutes`) the popup turns red and can no
 | 5 | Remediate | If a schedule from this boot session is **overdue** (the enforced reboot did not happen, for example because the task was deleted), the device reboots after `$NoUserRebootDelaySeconds` and the script ends |
 | 6 | Remediate | Disables Fast Startup (`HiberbootEnabled = 0` in `HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power`), takes effect with the upcoming reboot |
 | 7 | Remediate | Writes the schedule (start time, deadline, uptime) and all popup texts and colors to `HKLM:\SOFTWARE\<OrgPrefix>\RebootReminder` |
-| 8 | Remediate | Writes the popup script to `C:\ProgramData\<OrgPrefix>\RebootReminder\RebootReminderPopup.ps1` with a locked down ACL (SYSTEM and Administrators full control, Users read and execute only) |
+| 8 | Remediate | Writes the popup script to `C:\Program Files\<OrgPrefix>\RebootReminder\RebootReminderPopup.ps1` with a locked down ACL. Stops if that folder is a link or not owned by SYSTEM, Administrators or TrustedInstaller (SYSTEM and Administrators full control, Users read and execute only) |
 | 9 | Remediate | Replaces the tasks of a previous cycle and registers the enforced reboot task under `\<OrgPrefix>\` in Task Scheduler |
 | 10 | Remediate | If **nobody is signed in** (no `explorer.exe`), the device reboots after `$NoUserRebootDelaySeconds` instead of waiting for the countdown. No popup task is registered |
 | 11 | Remediate | Registers the popup task and starts it for all signed-in users |
@@ -72,7 +72,7 @@ That's why the remediation only **sets things up** and ends within seconds. The 
 
 ### Cleanup after the reboot
 
-After the reboot the uptime is back to 0. The next detection run sees a compliant device and removes both scheduled tasks and the registry key. The popup script in `ProgramData` stays and is overwritten on the next cycle.
+After the reboot the uptime is back to 0. The next detection run sees a compliant device and removes both scheduled tasks and the registry key. The popup script in `Program Files` stays and is overwritten on the next cycle.
 
 ## 📋 Requirements
 
@@ -94,7 +94,7 @@ Adjust the Parameters block at the top of the scripts before you upload them.
 | Variable | Default | Description |
 |---|---|---|
 | `$MaxUptimeDays` | `7` | Uptime in days that triggers the reminder. Must be the same in both scripts |
-| `$OrgPrefix` | `"headsinthecloud.blog"` | Used for the registry key, the ProgramData folder and the Task Scheduler folder. Must be the same in both scripts |
+| `$OrgPrefix` | `"headsinthecloud.blog"` | Used for the registry key, the Program Files folder and the Task Scheduler folder. Must be the same in both scripts |
 | `$TestUptimeDays` | `$null` | Testing only: fakes the uptime in days. Set to `$null` for production |
 
 ### Detection script only
@@ -198,7 +198,7 @@ State and tasks for troubleshooting (default `$OrgPrefix`):
 
 - Registry: `HKLM:\SOFTWARE\headsinthecloud.blog\RebootReminder`
 - Task Scheduler: `\headsinthecloud.blog\RebootReminder-EnforcedReboot` and `\headsinthecloud.blog\RebootReminder-Popup`
-- Popup script: `C:\ProgramData\headsinthecloud.blog\RebootReminder\RebootReminderPopup.ps1`
+- Popup script: `C:\Program Files\headsinthecloud.blog\RebootReminder\RebootReminderPopup.ps1`
 
 | Exit code | Meaning |
 |---|---|
@@ -208,6 +208,7 @@ State and tasks for troubleshooting (default `$OrgPrefix`):
 ## ⚠️ Good to know
 
 - **Devices restart.** Tell your users before you roll this out and test on a pilot group first.
+- **Popup in Program Files.** Standard users can create folders in `C:\ProgramData` and then own them. A user could create the popup folder there in advance and swap the popup script, which runs in the session of every signed-in user. `C:\Program Files` does not allow that. Earlier versions used `C:\ProgramData\<OrgPrefix>\RebootReminder`, that folder is no longer used and can be deleted.
 - **Same values in both scripts.** `$MaxUptimeDays` and `$OrgPrefix` must match, otherwise detection and remediation look at different limits, keys and tasks.
 - **Testing values.** `$TestUptimeDays` must be `$null` in production. Left set in the detection script, the device never becomes compliant and reboots every day.
 - **ASCII only texts.** Windows PowerShell 5.1 reads scripts without a BOM as ANSI, so non-ASCII characters in the popup texts break.

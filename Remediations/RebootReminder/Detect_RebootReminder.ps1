@@ -24,7 +24,7 @@ $OverdueGraceMinutes = 15
 # Testing only: fake uptime in days (e.g. 10). Set to $null for production
 $TestUptimeDays = $null
 
-# Used for registry key, ProgramData folder and Task Scheduler folder
+# Used for registry key, Program Files folder and Task Scheduler folder
 $OrgPrefix = "headsinthecloud.blog"
 $RegPath = "HKLM:\SOFTWARE\$OrgPrefix\RebootReminder"
 $TaskPath = "\$OrgPrefix\"

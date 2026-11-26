@@ -2,8 +2,8 @@
     Script:      Detect_CompanyPortalSearchShortcut.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.1
-    Date:        2026-11-23
+    Version:     1.2
+    Date:        2026-11-26
     Description: Detects whether an English-named Company Portal shortcut with the Company Portal icon
                  exists in the All Users Start Menu, so Start search finds "Intune" and "Company Portal"
                  on non-English clients.
@@ -14,7 +14,8 @@ $ShortcutName   = "Intune Company Portal"
 $PackageName    = "Microsoft.CompanyPortal"
 $AppUserModelId = "Microsoft.CompanyPortal_8wekyb3d8bbwe!App"
 $StartMenuPath  = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs"
-$IconFolder     = "$env:ProgramData\CompanyPortalSearchShortcut"
+# Program Files, not ProgramData: standard users can create folders in ProgramData and would own them
+$IconFolder     = "$env:ProgramFiles\CompanyPortalSearchShortcut"
 
 # ==== Logic ====
 try {

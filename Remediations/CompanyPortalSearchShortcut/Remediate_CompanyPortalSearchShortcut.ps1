@@ -2,8 +2,8 @@
     Script:      Remediate_CompanyPortalSearchShortcut.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.1
-    Date:        2026-11-23
+    Version:     1.2
+    Date:        2026-11-26
     Description: Creates an English-named Company Portal shortcut in the All Users Start Menu,
                  so Start search finds "Intune" and "Company Portal" on non-English clients.
                  The icon is taken from the installed Company Portal package.
@@ -14,7 +14,8 @@ $ShortcutName   = "Intune Company Portal"
 $PackageName    = "Microsoft.CompanyPortal"
 $AppUserModelId = "Microsoft.CompanyPortal_8wekyb3d8bbwe!App"
 $StartMenuPath  = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs"
-$IconFolder     = "$env:ProgramData\CompanyPortalSearchShortcut"
+# Program Files, not ProgramData: standard users can create folders in ProgramData and would own them
+$IconFolder     = "$env:ProgramFiles\CompanyPortalSearchShortcut"
 
 # ==== Logic ====
 try {
@@ -42,6 +43,10 @@ try {
     if ($LogoFile) {
         if (-not (Test-Path -Path $IconFolder)) {
             New-Item -Path $IconFolder -ItemType Directory -Force | Out-Null
+        }
+        # Never write the icon through a junction or symbolic link
+        if ((Get-Item -LiteralPath $IconFolder -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            throw "$IconFolder is a junction or symbolic link, icon not written"
         }
 
         $PngBytes = [System.IO.File]::ReadAllBytes($LogoFile.FullName)
