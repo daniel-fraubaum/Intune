@@ -1,13 +1,14 @@
 ﻿<#
-    Script:      EdgeManagedFavorites_HKCU_Set_Detect.ps1
+    Script:      Remediate_EdgeManagedFavorites_HKCU_Set.ps1
     Author:      Daniel Fraubaum
-    Version:     1.3
-    Date:        2026-11-24
-    Description: Checks the favorites set of this remediation in the staging key of the signed-in user
-                 (HKCU). Runs with the logged-on credentials, so every user only gets the sets of the
-                 remediations assigned to them. The Edge ManagedFavorites user policy is built from
-                 these sets by the merge remediation (EdgeManagedFavorites_HKCU_Merge_*), which must
-                 be assigned as well.
+    Blog:        https://headsinthecloud.blog
+    Version:     1.4
+    Date:        2026-11-26
+    Description: Writes or removes the favorites set of this remediation in the staging key of the
+                 signed-in user (HKCU). Runs with the logged-on credentials, so every user only gets
+                 the sets of the remediations assigned to them. The Edge ManagedFavorites user policy
+                 is built from these sets by the merge remediation (EdgeManagedFavorites_HKCU_Merge_*),
+                 which must be assigned as well.
                  Fill the Parameters block in the Detect script and copy it 1:1 into the
                  Remediate script, both scripts must always contain the same block.
                  Do not combine with the HKLM variant on the same device.
@@ -130,32 +131,26 @@ try {
     $OwnSetPath = Join-Path -Path "HKCU:\$RegistryBasePath" -ChildPath "Sets\$SetName"
     $DesiredSetJson = ConvertTo-SetJson -Items $Favorites
     $User = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-    $Issues = New-Object System.Collections.ArrayList
 
-    # Step 2: Check this set in the staging key of the signed-in user
-    $Exists = Test-Path -LiteralPath $OwnSetPath
+    # Step 2: Write or remove this set in the staging key of the signed-in user
     if ($RemoveSet) {
-        if ($Exists) { [void]$Issues.Add("set ""$SetName"" still present but marked for removal") }
-    }
-    elseif (-not $Exists) {
-        [void]$Issues.Add("set ""$SetName"" missing")
+        if (Test-Path -LiteralPath $OwnSetPath) { Remove-Item -LiteralPath $OwnSetPath -Recurse -Force -ErrorAction Stop }
+        $Message = "Set ""$SetName"" removed for $User."
     }
     else {
-        if ("$(Get-RegistryValue -Path $OwnSetPath -Name "Favorites")" -cne $DesiredSetJson) { [void]$Issues.Add("favorites of set ""$SetName"" changed") }
-        if ("$(Get-RegistryValue -Path $OwnSetPath -Name "TopLevelName")" -cne "$TopLevelName") { [void]$Issues.Add("top level name of set ""$SetName"" changed") }
-        if (Test-IsStale -LastUpdated "$(Get-RegistryValue -Path $OwnSetPath -Name "LastUpdated")" -Days $RefreshAfterDays) { [void]$Issues.Add("set ""$SetName"" refresh due") }
+        if (-not (Test-Path -LiteralPath $OwnSetPath)) { New-Item -Path $OwnSetPath -Force -ErrorAction Stop | Out-Null }
+        New-ItemProperty -LiteralPath $OwnSetPath -Name "Favorites" -Value $DesiredSetJson -PropertyType String -Force -ErrorAction Stop | Out-Null
+        New-ItemProperty -LiteralPath $OwnSetPath -Name "TopLevelName" -Value "$TopLevelName" -PropertyType String -Force -ErrorAction Stop | Out-Null
+        # LastUpdated comes last: the merge remediation skips a set without a valid timestamp, so a new set is only merged when it is complete
+        New-ItemProperty -LiteralPath $OwnSetPath -Name "LastUpdated" -Value (Get-Date).ToUniversalTime().ToString("o") -PropertyType String -Force -ErrorAction Stop | Out-Null
+        $Message = "Set ""$SetName"" written for $User."
     }
 
     # Step 3: Report
-    if ($Issues.Count -gt 0) {
-        Write-Output "Not compliant for ${User}: $($Issues -join "; ")."
-        exit 1
-    }
-    $State = if ($RemoveSet) { "not present" } else { "current" }
-    Write-Output "Compliant for ${User}: set ""$SetName"" $State."
+    Write-Output "$Message The merge remediation applies it to Edge on its next run."
     exit 0
 }
 catch {
-    Write-Error "Detection failed: $($_.Exception.Message)"
+    Write-Error "Remediation failed: $($_.Exception.Message)"
     exit 1
 }

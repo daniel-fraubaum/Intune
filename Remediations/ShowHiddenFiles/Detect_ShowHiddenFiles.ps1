@@ -1,5 +1,5 @@
 ﻿<#
-    Script:      ShowHiddenFiles_Detect.ps1
+    Script:      Detect_ShowHiddenFiles.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
     Version:     1.0

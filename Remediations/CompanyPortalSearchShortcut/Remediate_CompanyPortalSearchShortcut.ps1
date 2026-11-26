@@ -1,5 +1,5 @@
 ﻿<#
-    Script:      CompanyPortalSearchShortcut_Remediate.ps1
+    Script:      Remediate_CompanyPortalSearchShortcut.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
     Version:     1.1

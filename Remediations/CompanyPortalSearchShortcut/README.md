@@ -30,10 +30,10 @@ On a German Windows 11 client, typing `company` in Start search now returns the 
 
 ## Files
 
-- `CompanyPortalSearchShortcut_Detect.ps1`  
+- `Detect_CompanyPortalSearchShortcut.ps1`  
   Detection script. Returns exit code `0` if the shortcut exists, points to the Company Portal and uses the icon (or the app is not installed), `1` otherwise.
 
-- `CompanyPortalSearchShortcut_Remediate.ps1`  
+- `Remediate_CompanyPortalSearchShortcut.ps1`  
   Remediation script. Extracts the icon and recreates the shortcut.
 
 ---
@@ -68,8 +68,8 @@ Get-StartApps | Where-Object Name -like "*portal*"
    Devices → Scripts and remediations → **Remediations** → **Create**
 
 2. **Settings**  
-   - Detection script file: `CompanyPortalSearchShortcut_Detect.ps1`  
-   - Remediation script file: `CompanyPortalSearchShortcut_Remediate.ps1`  
+   - Detection script file: `Detect_CompanyPortalSearchShortcut.ps1`  
+   - Remediation script file: `Remediate_CompanyPortalSearchShortcut.ps1`  
    - Run this script using the logged-on credentials: **No** (runs as SYSTEM)  
    - Enforce script signature check: **No**  
    - Run script in 64-bit PowerShell: **Yes**

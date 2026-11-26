@@ -1,5 +1,5 @@
 ﻿<#
-    Script:      ShowFileExtensions_Detect.ps1
+    Script:      Detect_ShowFileExtensions.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
     Version:     1.0

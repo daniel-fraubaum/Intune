@@ -24,10 +24,10 @@ Visible extensions make it easier for users to spot disguised files such as `inv
 
 ## Files
 
-- `ShowFileExtensions_Detect.ps1`  
+- `Detect_ShowFileExtensions.ps1`  
   Detection script. Returns exit code `0` if `HideFileExt` is `0`, `1` if it has another value or is missing.
 
-- `ShowFileExtensions_Remediate.ps1`  
+- `Remediate_ShowFileExtensions.ps1`  
   Remediation script. Creates the key if needed and sets `HideFileExt` to `0`.
 
 ---
@@ -44,8 +44,8 @@ There is **no CSP and no Settings Catalog setting** that shows file extensions i
    Devices → Scripts and remediations → **Remediations** → **Create**
 
 2. **Settings**  
-   - Detection script file: `ShowFileExtensions_Detect.ps1`  
-   - Remediation script file: `ShowFileExtensions_Remediate.ps1`  
+   - Detection script file: `Detect_ShowFileExtensions.ps1`  
+   - Remediation script file: `Remediate_ShowFileExtensions.ps1`  
    - Run this script using the logged-on credentials: **Yes**  
    - Enforce script signature check: **No**  
    - Run script in 64-bit PowerShell: **Yes**

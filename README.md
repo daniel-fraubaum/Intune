@@ -18,7 +18,6 @@ Every package has its own README with what it does, the Intune settings, how to 
 | --- | --- |
 | [AdobeSecureScoreSettings](./Remediations/AdobeSecureScoreSettings) | Adobe Acrobat and Reader DC lockdown settings for Secure Score: Flash off, JavaScript off, Protected Mode on |
 | [CompanyPortalSearchShortcut](./Remediations/CompanyPortalSearchShortcut) | English-named Company Portal shortcut, so Start search finds "Intune" and "Company Portal" on non-English clients |
-| [CVE-2013-3900](./Remediations/CVE-2013-3900) | WinVerifyTrust signature validation fix (`EnableCertPaddingCheck`) |
 | [DisableNetBIOS](./Remediations/DisableNetBIOS) | Disables NetBIOS over TCP/IP on all active, physical network adapters |
 | [EdgeManagedFavorites](./Remediations/EdgeManagedFavorites) | Merges the Edge managed favorites of several remediations into one favorites tree, per device (HKLM) or per user (HKCU) |
 | [FixDesktopDeletionRight](./Remediations/FixDesktopDeletionRight) | Lets standard users delete shortcuts that installers put on the Public Desktop |

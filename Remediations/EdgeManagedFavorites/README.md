@@ -22,7 +22,7 @@ The package comes in two variants:
 | | HKLM variant | HKCU variant |
 | --- | --- | --- |
 | Who gets which favorites | Every user on the device gets all sets assigned to the device | Every user gets only the sets assigned to that user |
-| Scripts | One pair per set:<br>`EdgeManagedFavorites_HKLM_Detect.ps1`<br>`EdgeManagedFavorites_HKLM_Remediate.ps1` | One **set pair** per set:<br>`EdgeManagedFavorites_HKCU_Set_Detect.ps1`<br>`EdgeManagedFavorites_HKCU_Set_Remediate.ps1`<br><br>Plus **one merge pair**:<br>`EdgeManagedFavorites_HKCU_Merge_Detect.ps1`<br>`EdgeManagedFavorites_HKCU_Merge_Remediate.ps1` |
+| Scripts | One pair per set:<br>`Detect_EdgeManagedFavorites_HKLM.ps1`<br>`Remediate_EdgeManagedFavorites_HKLM.ps1` | One **set pair** per set:<br>`Detect_EdgeManagedFavorites_HKCU_Set.ps1`<br>`Remediate_EdgeManagedFavorites_HKCU_Set.ps1`<br><br>Plus **one merge pair**:<br>`Detect_EdgeManagedFavorites_HKCU_Merge.ps1`<br>`Remediate_EdgeManagedFavorites_HKCU_Merge.ps1` |
 | Runs as | SYSTEM | Set pair: the signed-in user<br>Merge pair: SYSTEM |
 | Assign to | Device groups | Set pair: user groups<br>Merge pair: device groups |
 | Staging key | `HKLM:\SOFTWARE\YourCompany\EdgeManagedFavorites` | `HKCU:\Software\YourCompany\EdgeManagedFavorites` of every user |
@@ -42,7 +42,7 @@ The HKCU variant always consists of **one merge remediation** plus **one set rem
 
 | | Merge remediation | Set remediation |
 | --- | --- | --- |
-| Scripts | `EdgeManagedFavorites_HKCU_Merge_Detect.ps1`<br>`EdgeManagedFavorites_HKCU_Merge_Remediate.ps1` | `EdgeManagedFavorites_HKCU_Set_Detect.ps1`<br>`EdgeManagedFavorites_HKCU_Set_Remediate.ps1` |
+| Scripts | `Detect_EdgeManagedFavorites_HKCU_Merge.ps1`<br>`Remediate_EdgeManagedFavorites_HKCU_Merge.ps1` | `Detect_EdgeManagedFavorites_HKCU_Set.ps1`<br>`Remediate_EdgeManagedFavorites_HKCU_Set.ps1` |
 | How many | **Exactly one** in the tenant | **One per group of favorites**, also for the favorites that everyone gets |
 | Contains favorites | No, it only has path parameters | Yes, `$Favorites` of this set |
 | Runs as | SYSTEM | The signed-in user |
@@ -211,24 +211,24 @@ The resulting policy value:
 
 ### HKLM variant
 
-- `EdgeManagedFavorites_HKLM_Detect.ps1`  
+- `Detect_EdgeManagedFavorites_HKLM.ps1`  
   Returns exit code `0` if this set is present and current in the staging key, no stale set is waiting for cleanup and the Edge device policy matches the merged result of all sets. Returns `1` otherwise. Changes nothing.
 
-- `EdgeManagedFavorites_HKLM_Remediate.ps1`  
+- `Remediate_EdgeManagedFavorites_HKLM.ps1`  
   Writes or removes this set, removes stale sets and rebuilds the Edge device policy value.
 
 ### HKCU variant
 
-- `EdgeManagedFavorites_HKCU_Set_Detect.ps1`  
+- `Detect_EdgeManagedFavorites_HKCU_Set.ps1`  
   Runs as the signed-in user. Returns `0` if this set is present and current in the staging key of the user (or absent with `$RemoveSet = $true`). Returns `1` otherwise. Changes nothing. Does not check the Edge policy, that is the job of the merge remediation.
 
-- `EdgeManagedFavorites_HKCU_Set_Remediate.ps1`  
+- `Remediate_EdgeManagedFavorites_HKCU_Set.ps1`  
   Runs as the signed-in user. Writes or removes this set in the staging key of the user. Never writes the Edge policy. Fails with a clear message when it runs as SYSTEM by mistake.
 
-- `EdgeManagedFavorites_HKCU_Merge_Detect.ps1`  
+- `Detect_EdgeManagedFavorites_HKCU_Merge.ps1`  
   Runs as SYSTEM. Returns `0` if the Edge user policy of every loaded user profile matches the merged sets of that user and no stale set is waiting for cleanup. Returns `0` if no user is signed in. Returns `1` otherwise. Changes nothing.
 
-- `EdgeManagedFavorites_HKCU_Merge_Remediate.ps1`  
+- `Remediate_EdgeManagedFavorites_HKCU_Merge.ps1`  
   Runs as SYSTEM. Removes stale sets and writes the merged Edge user policy to every loaded user profile. Returns `1` if a single profile fails and names it in the output, the other profiles are still updated.
 
 ---
@@ -318,8 +318,8 @@ One remediation per favorites set:
 
 | Setting | Value |
 | --- | --- |
-| Detection script | `EdgeManagedFavorites_HKLM_Detect.ps1` |
-| Remediation script | `EdgeManagedFavorites_HKLM_Remediate.ps1` |
+| Detection script | `Detect_EdgeManagedFavorites_HKLM.ps1` |
+| Remediation script | `Remediate_EdgeManagedFavorites_HKLM.ps1` |
 | Run this script using the logged-on credentials | **No** |
 | Assignments | Device groups |
 | Schedule | **Daily** |
@@ -330,8 +330,8 @@ One remediation per favorites set:
 
 | Setting | Value |
 | --- | --- |
-| Detection script | `EdgeManagedFavorites_HKCU_Set_Detect.ps1` |
-| Remediation script | `EdgeManagedFavorites_HKCU_Set_Remediate.ps1` |
+| Detection script | `Detect_EdgeManagedFavorites_HKCU_Set.ps1` |
+| Remediation script | `Remediate_EdgeManagedFavorites_HKCU_Set.ps1` |
 | Run this script using the logged-on credentials | **Yes** |
 | Assignments | User groups. Assigning a device group gives the set to every user who signs in on those devices |
 | Schedule | **Daily** |
@@ -340,8 +340,8 @@ Plus **exactly one** merge remediation:
 
 | Setting | Value |
 | --- | --- |
-| Detection script | `EdgeManagedFavorites_HKCU_Merge_Detect.ps1` |
-| Remediation script | `EdgeManagedFavorites_HKCU_Merge_Remediate.ps1` |
+| Detection script | `Detect_EdgeManagedFavorites_HKCU_Merge.ps1` |
+| Remediation script | `Remediate_EdgeManagedFavorites_HKCU_Merge.ps1` |
 | Run this script using the logged-on credentials | **No** |
 | Assignments | Device groups that contain all devices where users with a set remediation sign in |
 | Schedule | **Hourly**, so changes of the set remediations reach Edge quickly |

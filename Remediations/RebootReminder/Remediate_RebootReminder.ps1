@@ -1,5 +1,5 @@
 ﻿<#
-Script:      Remediation_RebootReminder.ps1
+Script:      Remediate_RebootReminder.ps1
 Author:      Daniel Fraubaum
 Blog:        https://headsinthecloud.blog
 Version:     1.1
@@ -17,7 +17,7 @@ Description: Intune Remediation script (run as SYSTEM, 64-bit).
 # Parameters
 # ==========================================================================
 
-# Must match the value in Detection_RebootReminder.ps1
+# Must match the value in Detect_RebootReminder.ps1
 $MaxUptimeDays = 7
 
 # Countdown until the enforced reboot
@@ -72,7 +72,7 @@ Script:      RebootReminderPopup.ps1
 Author:      Daniel Fraubaum
 Version:     1.0
 Date:        2026-11-18
-Description: WPF reboot reminder, deployed and started by Remediation_RebootReminder.ps1.
+Description: WPF reboot reminder, deployed and started by Remediate_RebootReminder.ps1.
              Reads all settings from HKLM, the countdown is based on wall clock time (sleep safe).
 #>
 

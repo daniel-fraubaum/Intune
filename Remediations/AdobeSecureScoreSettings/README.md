@@ -33,10 +33,10 @@ The values are set on every device in scope, also where Adobe is not installed y
 
 ## Files
 
-- `AdobeSecureScoreSettings_Detect.ps1`  
+- `Detect_AdobeSecureScoreSettings.ps1`  
   Detection script. Returns exit code `0` if every value exists as `REG_DWORD` with the right data, `1` otherwise. The output lists the missing or wrong values.
 
-- `AdobeSecureScoreSettings_Remediate.ps1`  
+- `Remediate_AdobeSecureScoreSettings.ps1`  
   Remediation script. Creates missing keys, writes missing or wrong values and logs every change.
 
 ---
@@ -66,8 +66,8 @@ Adobe reference for the values: [Preference Reference, Privileged](https://www.a
    Devices → Scripts and remediations → **Remediations** → **Create**
 
 2. **Settings**  
-   - Detection script file: `AdobeSecureScoreSettings_Detect.ps1`  
-   - Remediation script file: `AdobeSecureScoreSettings_Remediate.ps1`  
+   - Detection script file: `Detect_AdobeSecureScoreSettings.ps1`  
+   - Remediation script file: `Remediate_AdobeSecureScoreSettings.ps1`  
    - Run this script using the logged-on credentials: **No** (runs as SYSTEM)  
    - Enforce script signature check: **No**  
    - Run script in 64-bit PowerShell: **Yes**

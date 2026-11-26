@@ -1,5 +1,5 @@
 ﻿<#
-    Script:      FixDesktopDeletionRight_Detect.ps1
+    Script:      Detect_FixDesktopDeletionRight.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
     Version:     1.1
@@ -13,7 +13,7 @@
 #>
 
 # ==== Parameters ====
-# Must match the value in FixDesktopDeletionRight_Remediate.ps1
+# Must match the value in Remediate_FixDesktopDeletionRight.ps1
 $UsersSid = "S-1-5-32-545"
 
 # ==== Functions ====

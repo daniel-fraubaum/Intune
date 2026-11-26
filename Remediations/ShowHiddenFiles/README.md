@@ -24,10 +24,10 @@ This folder contains an **Intune Remediation** pair that makes File Explorer sho
 
 ## Files
 
-- `ShowHiddenFiles_Detect.ps1`  
+- `Detect_ShowHiddenFiles.ps1`  
   Detection script. Returns exit code `0` if `Hidden` is `1`, `1` if it has another value or is missing.
 
-- `ShowHiddenFiles_Remediate.ps1`  
+- `Remediate_ShowHiddenFiles.ps1`  
   Remediation script. Creates the key if needed and sets `Hidden` to `1`.
 
 ---
@@ -44,8 +44,8 @@ There is **no CSP and no Settings Catalog setting** that shows hidden files in F
    Devices → Scripts and remediations → **Remediations** → **Create**
 
 2. **Settings**  
-   - Detection script file: `ShowHiddenFiles_Detect.ps1`  
-   - Remediation script file: `ShowHiddenFiles_Remediate.ps1`  
+   - Detection script file: `Detect_ShowHiddenFiles.ps1`  
+   - Remediation script file: `Remediate_ShowHiddenFiles.ps1`  
    - Run this script using the logged-on credentials: **Yes**  
    - Enforce script signature check: **No**  
    - Run script in 64-bit PowerShell: **Yes**

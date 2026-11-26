@@ -1,5 +1,5 @@
 ﻿<#
-    Script:      AdobeSecureScoreSettings_Detect.ps1
+    Script:      Detect_AdobeSecureScoreSettings.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
     Version:     1.1
@@ -11,7 +11,7 @@
 #>
 
 # ==== Parameters ====
-# Must match the list in AdobeSecureScoreSettings_Remediate.ps1
+# Must match the list in Remediate_AdobeSecureScoreSettings.ps1
 $Settings = @(
     @{ Product = "Acrobat Reader"; Version = "DC"; Name = "bEnableFlash";       Value = 0 }
     @{ Product = "Acrobat Reader"; Version = "DC"; Name = "bDisableJavaScript"; Value = 1 }

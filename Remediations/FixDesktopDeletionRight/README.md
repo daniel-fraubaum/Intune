@@ -24,10 +24,10 @@ Many installers (browsers, Teams, Adobe, VPN clients and more) put their shortcu
 
 ## Files
 
-- `FixDesktopDeletionRight_Detect.ps1`  
+- `Detect_FixDesktopDeletionRight.ps1`  
   Detection script. Returns exit code `0` if Users have `DC` on the Public Desktop and no explicit right to create items, delete the folder or change its permissions. Returns `1` otherwise.
 
-- `FixDesktopDeletionRight_Remediate.ps1`  
+- `Remediate_FixDesktopDeletionRight.ps1`  
   Remediation script. Runs `icacls` on the Public Desktop and logs the result.
 
 The remediation runs these commands:
@@ -84,8 +84,8 @@ There is **no CSP and no Settings Catalog setting** for file system permissions 
    Devices → Scripts and remediations → **Remediations** → **Create**
 
 2. **Settings**  
-   - Detection script file: `FixDesktopDeletionRight_Detect.ps1`  
-   - Remediation script file: `FixDesktopDeletionRight_Remediate.ps1`  
+   - Detection script file: `Detect_FixDesktopDeletionRight.ps1`  
+   - Remediation script file: `Remediate_FixDesktopDeletionRight.ps1`  
    - Run this script using the logged-on credentials: **No** (runs as SYSTEM)  
    - Enforce script signature check: **No**  
    - Run script in 64-bit PowerShell: **Yes**
@@ -103,7 +103,7 @@ There is **no CSP and no Settings Catalog setting** for file system permissions 
 Run the remediation as SYSTEM with [PsExec](https://learn.microsoft.com/sysinternals/downloads/psexec) from an elevated prompt, then check the permissions:
 
 ```
-psexec -s C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Temp\FixDesktopDeletionRight_Remediate.ps1
+psexec -s C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Temp\Remediate_FixDesktopDeletionRight.ps1
 ```
 
 ```

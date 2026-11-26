@@ -1,5 +1,5 @@
 ﻿<#
-    Script:      CompanyPortalSearchShortcut_Detect.ps1
+    Script:      Detect_CompanyPortalSearchShortcut.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
     Version:     1.1

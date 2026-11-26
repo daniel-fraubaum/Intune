@@ -41,10 +41,10 @@ The popup follows the Windows app theme automatically.
 
 ## Files
 
-- `Detection_RebootReminder.ps1`  
+- `Detect_RebootReminder.ps1`  
   Detection script. Returns exit code `0` if the uptime is below the limit or a reboot is already scheduled for this boot session, `1` if remediation is required.
 
-- `Remediation_RebootReminder.ps1`  
+- `Remediate_RebootReminder.ps1`  
   Remediation script. Schedules the enforced reboot, deploys the popup and starts it for all signed-in users.
 
 ---
@@ -136,8 +136,8 @@ All parameters are at the top of the scripts in the **Parameters** section.
    - Description: Shows a reboot popup with countdown and enforces the reboot
 
 3. **Settings**  
-   - Detection script file: `Detection_RebootReminder.ps1`  
-   - Remediation script file: `Remediation_RebootReminder.ps1`  
+   - Detection script file: `Detect_RebootReminder.ps1`  
+   - Remediation script file: `Remediate_RebootReminder.ps1`  
    - Run this script using the logged-on credentials: **No** (runs as SYSTEM)  
    - Enforce script signature check: **No**  
    - Run script in 64-bit PowerShell: **Yes**
@@ -163,7 +163,7 @@ All parameters are at the top of the scripts in the **Parameters** section.
 
 Test on a **VM or a test device**. The device **will restart**.
 
-1. In `Remediation_RebootReminder.ps1` set:
+1. In `Remediate_RebootReminder.ps1` set:
    ```powershell
    $TestUptimeDays = 10
    $CountdownMinutes = 5
@@ -171,13 +171,13 @@ Test on a **VM or a test device**. The device **will restart**.
 2. Sign in to the test device with a normal user account  
 3. Run the remediation as SYSTEM with [PsExec](https://learn.microsoft.com/sysinternals/downloads/psexec) from an elevated prompt:
    ```
-   psexec -s C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Temp\Remediation_RebootReminder.ps1
+   psexec -s C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Temp\Remediate_RebootReminder.ps1
    ```
 4. The popup appears in the bottom right corner within a few seconds. Check the tasks under `\headsinthecloud.blog\` in Task Scheduler  
 5. After 5 minutes the SYSTEM task reboots the device  
 6. After the reboot, run the detection script the same way to verify the cleanup (tasks and registry key removed):
    ```
-   psexec -s C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Temp\Detection_RebootReminder.ps1
+   psexec -s C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Temp\Detect_RebootReminder.ps1
    ```
 
 > Note  

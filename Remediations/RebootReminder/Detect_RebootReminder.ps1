@@ -1,5 +1,5 @@
 ﻿<#
-Script:      Detection_RebootReminder.ps1
+Script:      Detect_RebootReminder.ps1
 Author:      Daniel Fraubaum
 Blog:        https://headsinthecloud.blog
 Version:     1.0
@@ -15,7 +15,7 @@ Description: Intune Remediation detection script (run as SYSTEM, 64-bit).
 # Parameters
 # ==========================================================================
 
-# Must match the value in Remediation_RebootReminder.ps1
+# Must match the value in Remediate_RebootReminder.ps1
 $MaxUptimeDays = 7
 
 # If a scheduled reboot is overdue by more than this, detection fails again and remediation reboots right away
