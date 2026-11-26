@@ -47,6 +47,8 @@ This package deploys Microsoft Edge managed favorites from **several independent
 | 1 | Detect | `Detect_EdgeManagedFavorites_HKLM.ps1` checks that this set is present and current in the staging key (favorites, top level name, refresh not due), or absent with `$RemoveSet = $true`. It also checks that no stale set is waiting for cleanup and that the Edge device policy matches the merged result of all sets. Exit `0` if everything matches, otherwise `1`. Changes nothing |
 | 2 | Remediate | `Remediate_EdgeManagedFavorites_HKLM.ps1` takes the global mutex (waits up to 2 minutes), writes or removes this set, removes stale sets of other remediations, merges all sets and writes the Edge device policy value. Removes the value if no favorites are left |
 
+Both HKLM scripts fail with a clear message (exit `1`) when they run in 32-bit PowerShell or when `$RegistryBasePath` does not start with `HKLM:\SOFTWARE\`.
+
 ### HKCU variant
 
 The HKCU variant always consists of **one merge remediation** plus **one set remediation per group of favorites**:
@@ -237,7 +239,7 @@ Do not change anything outside the block. If the two blocks differ, detection ch
 | `$TopLevelName` | `Company Favorites` | Name of the managed favorites root folder in Edge. Empty = Edge default **Managed favorites**. **Must be identical in every favorites remediation.** If the values differ, the set that comes first alphabetically by `SetName` wins |
 | `$Favorites` | 4 sample links | Favorites of this set. `Path` = folders separated by `/`, empty = directly in the root folder. `Name` and `Url` are required |
 | `$RemoveSet` | `$false` | `$true` removes this set. HKLM: from the device, the policy is rebuilt from the remaining sets. HKCU: from the profile of the user, the merge remediation rebuilds the policy |
-| `$RegistryBasePath` | HKLM: `HKLM:\SOFTWARE\CompanyName\EdgeManagedFavorites`<br>HKCU: `Software\CompanyName\EdgeManagedFavorites` | Staging location of the sets. Replace `CompanyName` with your own name. In the HKCU variant the path is relative to the user profile (no `HKCU:\`), otherwise the scripts fail. Must be identical in **every** favorites remediation (HKCU: also in the merge remediation) |
+| `$RegistryBasePath` | HKLM: `HKLM:\SOFTWARE\CompanyName\EdgeManagedFavorites`<br>HKCU: `Software\CompanyName\EdgeManagedFavorites` | Staging location of the sets. Replace `CompanyName` with your own name. In the HKLM variant it must start with `HKLM:\SOFTWARE\`, in the HKCU variant it is relative to the user profile (no `HKCU:\`), otherwise the scripts fail. Must be identical in **every** favorites remediation (HKCU: also in the merge remediation) |
 | `$StaleAfterDays` | `30` | Sets not refreshed for this many days are ignored and deleted. `0` = never. Must be identical in every favorites remediation (HKCU: also in the merge remediation) |
 | `$RefreshAfterDays` | `7` | Detection requests a refresh of the own set after this many days. Must be at least `1` and lower than `$StaleAfterDays` (unless `$StaleAfterDays` is `0`, then `0` = never is allowed), otherwise both scripts fail with an error |
 | `$EdgePolicyPath` | `HKLM:\SOFTWARE\Policies\Microsoft\Edge` | HKLM pair only. Registry key of the Edge policy |
@@ -394,7 +396,7 @@ The scripts write no log files. Everything goes to the output that Intune shows 
 | Exit code | Meaning |
 |---|---|
 | `0` | Detect: compliant (merge pair: also when no user profile is loaded). Remediate: set and policy written |
-| `1` | Detect: not compliant, or the check failed. Remediate: failed, for example invalid parameters, set pair running as SYSTEM, timeout after 2 minutes waiting for the mutex, or the merge failed for at least one user profile |
+| `1` | Detect: not compliant, or the check failed. Remediate: failed, for example invalid parameters, HKLM pair running in 32-bit PowerShell, set pair running as SYSTEM, timeout after 2 minutes waiting for the mutex, or the merge failed for at least one user profile |
 
 ## ⚠️ Good to know
 

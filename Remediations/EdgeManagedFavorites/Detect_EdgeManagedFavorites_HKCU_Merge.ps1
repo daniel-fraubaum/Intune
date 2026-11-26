@@ -2,7 +2,7 @@
     Script:      Detect_EdgeManagedFavorites_HKCU_Merge.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.4
+    Version:     1.5
     Date:        2026-11-26
     Description: Checks the Microsoft Edge ManagedFavorites user policy of every loaded user profile
                  against the favorites sets in the staging key of that profile. Every user only gets

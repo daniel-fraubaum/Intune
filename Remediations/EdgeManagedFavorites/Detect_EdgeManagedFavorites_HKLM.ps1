@@ -2,7 +2,7 @@
     Script:      Detect_EdgeManagedFavorites_HKLM.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.4
+    Version:     1.5
     Date:        2026-11-26
     Description: Checks whether the favorites set of this remediation is present and current in
                  the staging key and whether the Microsoft Edge ManagedFavorites policy (HKLM)
@@ -88,7 +88,13 @@ function ConvertTo-SetJson {
 }
 
 function Assert-Configuration {
-    param([string]$Name, [int]$StaleDays, [int]$RefreshDays)
+    param([string]$Name, [string]$BasePath, [int]$StaleDays, [int]$RefreshDays)
+    if (-not [Environment]::Is64BitProcess) {
+        throw "The script runs in 32-bit PowerShell. Set ""Run script in 64-bit PowerShell"" to Yes, otherwise the set ends up under WOW6432Node while the Edge policy key is shared, and several remediations overwrite each other."
+    }
+    if ($BasePath -notmatch "^HKLM:\\SOFTWARE\\[^*?\[\]]+$") {
+        throw "Invalid RegistryBasePath ""$BasePath"". It must start with HKLM:\SOFTWARE\, for example HKLM:\SOFTWARE\CompanyName\EdgeManagedFavorites."
+    }
     if ([string]::IsNullOrWhiteSpace($Name) -or $Name -match "[\\/*?\[\]]") {
         throw "Invalid SetName ""$Name"". It must not be empty or contain \ / * ? [ ]."
     }
@@ -218,7 +224,7 @@ function Build-ManagedFavoritesJson {
 
 try {
     # Step 1: Build the desired state of this set
-    Assert-Configuration -Name $SetName -StaleDays $StaleAfterDays -RefreshDays $RefreshAfterDays
+    Assert-Configuration -Name $SetName -BasePath $RegistryBasePath -StaleDays $StaleAfterDays -RefreshDays $RefreshAfterDays
     $SetsPath = Join-Path -Path $RegistryBasePath -ChildPath "Sets"
     $DesiredSetJson = ConvertTo-SetJson -Items $Favorites
     $StoredSets = Get-StoredSets -SetsPath $SetsPath

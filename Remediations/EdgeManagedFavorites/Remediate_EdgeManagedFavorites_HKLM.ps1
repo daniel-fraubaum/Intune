@@ -2,7 +2,7 @@
     Script:      Remediate_EdgeManagedFavorites_HKLM.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.4
+    Version:     1.5
     Date:        2026-11-26
     Description: Writes the favorites set of this remediation to a staging key and rebuilds the
                  Microsoft Edge ManagedFavorites policy (HKLM) from all sets on the device.
@@ -89,7 +89,13 @@ function ConvertTo-SetJson {
 }
 
 function Assert-Configuration {
-    param([string]$Name, [int]$StaleDays, [int]$RefreshDays)
+    param([string]$Name, [string]$BasePath, [int]$StaleDays, [int]$RefreshDays)
+    if (-not [Environment]::Is64BitProcess) {
+        throw "The script runs in 32-bit PowerShell. Set ""Run script in 64-bit PowerShell"" to Yes, otherwise the set ends up under WOW6432Node while the Edge policy key is shared, and several remediations overwrite each other."
+    }
+    if ($BasePath -notmatch "^HKLM:\\SOFTWARE\\[^*?\[\]]+$") {
+        throw "Invalid RegistryBasePath ""$BasePath"". It must start with HKLM:\SOFTWARE\, for example HKLM:\SOFTWARE\CompanyName\EdgeManagedFavorites."
+    }
     if ([string]::IsNullOrWhiteSpace($Name) -or $Name -match "[\\/*?\[\]]") {
         throw "Invalid SetName ""$Name"". It must not be empty or contain \ / * ? [ ]."
     }
@@ -230,7 +236,7 @@ try {
     if (-not $HasMutex) { throw "Timeout waiting for another favorites remediation to finish." }
 
     # Step 2: Build the desired state of this set
-    Assert-Configuration -Name $SetName -StaleDays $StaleAfterDays -RefreshDays $RefreshAfterDays
+    Assert-Configuration -Name $SetName -BasePath $RegistryBasePath -StaleDays $StaleAfterDays -RefreshDays $RefreshAfterDays
     $SetsPath = Join-Path -Path $RegistryBasePath -ChildPath "Sets"
     $OwnSetPath = Join-Path -Path $SetsPath -ChildPath $SetName
     $DesiredSetJson = ConvertTo-SetJson -Items $Favorites
