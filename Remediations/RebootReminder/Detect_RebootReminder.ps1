@@ -2,7 +2,7 @@
 Script:      Detect_RebootReminder.ps1
 Author:      Daniel Fraubaum
 Blog:        https://headsinthecloud.blog
-Version:     1.2
+Version:     1.3
 Date:        2026-11-26
 Description: Intune Remediation detection script (run as SYSTEM, 64-bit).
              Checks the device uptime against $MaxUptimeDays.
@@ -83,10 +83,11 @@ try {
         $ScheduledInThisBoot = $ScheduledAt -gt $LastBoot
     }
     $RebootTaskExists = [bool](Get-ScheduledTask -TaskPath $TaskPath -TaskName $RebootTaskName -ErrorAction SilentlyContinue)
+    $PopupTaskExists = [bool](Get-ScheduledTask -TaskPath $TaskPath -TaskName $PopupTaskName -ErrorAction SilentlyContinue)
 
-    # Step 3: Compliant, clean up leftovers from a previous cycle
+    # Step 3: Compliant, clean up leftovers from a previous cycle (also a popup task left on its own)
     if ($UptimeDays -lt $MaxUptimeDays) {
-        if ($State -or $RebootTaskExists) {
+        if ($State -or $RebootTaskExists -or $PopupTaskExists) {
             Clear-RebootReminderState
         }
         Write-Log "Compliant, uptime $UptimeDays days (limit $MaxUptimeDays)"

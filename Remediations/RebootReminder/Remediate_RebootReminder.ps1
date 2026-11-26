@@ -2,14 +2,16 @@
 Script:      Remediate_RebootReminder.ps1
 Author:      Daniel Fraubaum
 Blog:        https://headsinthecloud.blog
-Version:     1.2
+Version:     1.3
 Date:        2026-11-26
 Description: Intune Remediation script (run as SYSTEM, 64-bit).
-             1. Registers a one-time SYSTEM task that enforces the reboot after $CountdownMinutes.
-             2. Deploys a modern WPF popup (bottom right, light/dark aware, live countdown) and starts it
+             1. Deploys a modern WPF popup (bottom right, light/dark aware, live countdown) and starts it
                 in every interactive user session via a transient scheduled task (BUILTIN\Users).
-             3. If nobody is signed in, reboots after $NoUserRebootDelaySeconds instead.
+             2. Registers a one-time SYSTEM task that enforces the reboot after $CountdownMinutes.
+             3. If nobody is signed in (no explorer.exe and no active or disconnected user session),
+                reboots after $NoUserRebootDelaySeconds instead. If that check fails, the popup is used.
              The reboot is enforced by SYSTEM, closing or killing the popup does not stop it.
+             If the setup fails, tasks and registry state are removed, so the next detection retries.
              Detection removes all transient tasks and state after the reboot.
 #>
 
@@ -404,11 +406,114 @@ function Set-RegistryValue {
     New-ItemProperty -Path $RegPath -Name $Name -Value $Value -PropertyType $Type -Force | Out-Null
 }
 
+function Get-SignedInUserState {
+    # Returns "Yes", "No" or "Unknown". Only "No" allows the immediate reboot.
+    $Found = $false
+    $Failed = $false
+
+    # Check 1: explorer.exe (normal desktop sessions)
+    try {
+        if (@(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'explorer.exe'" -ErrorAction Stop).Count -gt 0) { $Found = $true }
+    }
+    catch {
+        Write-Log "explorer.exe check failed: $($_.Exception.Message)"
+        $Failed = $true
+    }
+
+    # Check 2: user sessions that are active or disconnected (kiosk and Shell Launcher devices have no explorer.exe)
+    try {
+        if (-not ("RebootReminder.Wts" -as [type])) {
+            Add-Type -ErrorAction Stop -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+namespace RebootReminder {
+    public static class Wts {
+        [StructLayout(LayoutKind.Sequential)]
+        struct WTS_SESSION_INFO { public int SessionId; public IntPtr WinStationName; public int State; }
+        [DllImport("wtsapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool WTSEnumerateSessions(IntPtr hServer, int Reserved, int Version, out IntPtr ppSessionInfo, out int pCount);
+        [DllImport("wtsapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool WTSQuerySessionInformation(IntPtr hServer, int SessionId, int WTSInfoClass, out IntPtr ppBuffer, out int pBytesReturned);
+        [DllImport("wtsapi32.dll")]
+        static extern void WTSFreeMemory(IntPtr pMemory);
+        // Returns "SessionId:State:User" for every session with a user name. State 0 = active, 4 = disconnected
+        public static string[] GetUserSessions() {
+            IntPtr Buffer;
+            int Count;
+            if (!WTSEnumerateSessions(IntPtr.Zero, 0, 1, out Buffer, out Count)) { throw new System.ComponentModel.Win32Exception(); }
+            List<string> Result = new List<string>();
+            try {
+                int Size = Marshal.SizeOf(typeof(WTS_SESSION_INFO));
+                for (int i = 0; i < Count; i++) {
+                    WTS_SESSION_INFO Info = (WTS_SESSION_INFO)Marshal.PtrToStructure(new IntPtr(Buffer.ToInt64() + i * Size), typeof(WTS_SESSION_INFO));
+                    IntPtr NameBuffer;
+                    int Bytes;
+                    // 5 = WTSUserName
+                    if (!WTSQuerySessionInformation(IntPtr.Zero, Info.SessionId, 5, out NameBuffer, out Bytes)) { continue; }
+                    string User = Marshal.PtrToStringUni(NameBuffer);
+                    WTSFreeMemory(NameBuffer);
+                    if (!String.IsNullOrEmpty(User)) { Result.Add(Info.SessionId + ":" + Info.State + ":" + User); }
+                }
+            }
+            finally { WTSFreeMemory(Buffer); }
+            return Result.ToArray();
+        }
+    }
+}
+"@
+        }
+        $Sessions = @([RebootReminder.Wts]::GetUserSessions() | Where-Object { ($_ -split ":")[1] -in @("0", "4") })
+        if ($Sessions.Count -gt 0) {
+            Write-Log "User sessions (id:state:user): $($Sessions -join ', ')"
+            $Found = $true
+        }
+    }
+    catch {
+        Write-Log "User session check failed: $($_.Exception.Message)"
+        $Failed = $true
+    }
+
+    if ($Found) { return "Yes" }
+    if ($Failed) { return "Unknown" }
+    return "No"
+}
+
+function Remove-RebootReminderSetup {
+    # Stop a popup that may already run (the task stops conhost.exe, not the PowerShell child), then remove both tasks and the registry state
+    Stop-ScheduledTask -TaskPath $TaskPath -TaskName $PopupTaskName -ErrorAction SilentlyContinue
+    $PopupFileName = Split-Path -Path $PopupFile -Leaf
+    Get-CimInstance -ClassName Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -like "*$PopupFileName*" } |
+        ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName Terminate -ErrorAction SilentlyContinue | Out-Null }
+    foreach ($TaskName in @($PopupTaskName, $RebootTaskName)) {
+        Unregister-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+    Remove-Item -Path $RegPath -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+function Register-EnforcedRebootTask {
+    # Guard: only reboot if the device has not booted since the schedule was created (e.g. user shut down and powered on after the deadline)
+    # The comment is embedded as a single-quoted literal, so quotes or $ in the text cannot break the guard
+    $CommentLiteral = "'" + $ShutdownComment.Replace("'", "''") + "'"
+    $GuardScript = "`$Comment = $CommentLiteral; if ((Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime -lt ([datetime]::new($ScheduledAtTicks, [DateTimeKind]::Utc)).ToLocalTime()) { & `"$env:SystemRoot\System32\shutdown.exe`" /r /f /t 60 /d p:0:0 /c `$Comment }"
+    $EncodedGuard = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($GuardScript))
+    $RebootAction = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $EncodedGuard"
+    $RebootTrigger = New-ScheduledTaskTrigger -Once -At $Deadline
+    $RebootPrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    $RebootSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+    Register-ScheduledTask -TaskPath $TaskPath -TaskName $RebootTaskName -Action $RebootAction -Trigger $RebootTrigger -Principal $RebootPrincipal -Settings $RebootSettings -Description "Enforced maintenance reboot (Intune Remediation)" -ErrorAction Stop | Out-Null
+    Write-Log "Enforced reboot task registered for $Deadline"
+}
+
 # ==========================================================================
 # Logic
 # ==========================================================================
 
 try {
+    # shutdown.exe cannot take double quotes inside /c, replace them once for all uses (guard, popup, direct calls)
+    $ShutdownComment = $ShutdownComment.Replace('"', "'")
+
     # Step 1: Determine uptime and existing state
     $Now = Get-Date
     $LastBoot = (Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop).LastBootUpTime
@@ -483,31 +588,24 @@ try {
     $PopupScript | Set-Content -Path $PopupFile -Encoding UTF8 -Force
     Write-Log "Popup script deployed to $PopupFile"
 
-    # Step 6: Register the enforced reboot (SYSTEM, one time, runs as soon as possible if the deadline was missed)
+    # Step 6: Remove the tasks of a previous cycle
     foreach ($TaskName in @($PopupTaskName, $RebootTaskName)) {
         Unregister-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     }
-    # Guard: only reboot if the device has not booted since the schedule was created (e.g. user shut down and powered on after the deadline)
     $ScheduledAtTicks = $Now.ToUniversalTime().Ticks
-    $GuardScript = "if ((Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime -lt ([datetime]::new($ScheduledAtTicks, [DateTimeKind]::Utc)).ToLocalTime()) { & `"$env:SystemRoot\System32\shutdown.exe`" /r /f /t 60 /d p:0:0 /c `"$ShutdownComment`" }"
-    $EncodedGuard = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($GuardScript))
-    $RebootAction = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand $EncodedGuard"
-    $RebootTrigger = New-ScheduledTaskTrigger -Once -At $Deadline
-    $RebootPrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $RebootSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
-    Register-ScheduledTask -TaskPath $TaskPath -TaskName $RebootTaskName -Action $RebootAction -Trigger $RebootTrigger -Principal $RebootPrincipal -Settings $RebootSettings -Description "Enforced maintenance reboot (Intune Remediation)" -ErrorAction Stop | Out-Null
-    Write-Log "Enforced reboot task registered for $Deadline"
 
-    # Step 7: Nobody signed in, no popup needed
-    $InteractiveSessions = @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'explorer.exe'" -ErrorAction SilentlyContinue)
-    if ($InteractiveSessions.Count -eq 0 -and $RebootImmediatelyIfNoUser) {
+    # Step 7: Nobody signed in, no popup needed. If the check fails, the popup is used, never the immediate reboot
+    $SignedIn = Get-SignedInUserState
+    Write-Log "Signed-in user check: $SignedIn"
+    if ($SignedIn -eq "No" -and $RebootImmediatelyIfNoUser) {
+        Register-EnforcedRebootTask
         Write-Log "No interactive session found, rebooting in $NoUserRebootDelaySeconds seconds"
         & "$env:SystemRoot\System32\shutdown.exe" /r /f /t $NoUserRebootDelaySeconds /d p:0:0 /c "$ShutdownComment"
         Write-Output "No user signed in: reboot in $NoUserRebootDelaySeconds seconds (uptime $UptimeDays days)"
         exit 0
     }
 
-    # Step 8: Register and start the popup task for all interactive users (re-launch every 15 minutes and at logon)
+    # Step 8: Register the popup task for all interactive users (re-launch every 15 minutes and at logon)
     $PowerShellExe = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
     $PopupArguments = "--headless `"$PowerShellExe`" -NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File `"$PopupFile`" -RegPath `"$RegPath`""
     $PopupAction = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\conhost.exe" -Argument $PopupArguments
@@ -518,14 +616,23 @@ try {
     $PopupPrincipal = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545" -RunLevel Limited
     $PopupSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances Parallel -ExecutionTimeLimit (New-TimeSpan -Minutes ($CountdownMinutes + 30))
     Register-ScheduledTask -TaskPath $TaskPath -TaskName $PopupTaskName -Action $PopupAction -Trigger $PopupTriggers -Principal $PopupPrincipal -Settings $PopupSettings -Description "Reboot reminder popup (Intune Remediation)" -ErrorAction Stop | Out-Null
+    Write-Log "Popup task registered"
+
+    # Step 9: Register the enforced reboot (SYSTEM, one time, runs as soon as possible if the deadline was missed)
+    Register-EnforcedRebootTask
+
+    # Step 10: Start the popup now
     Start-ScheduledTask -TaskPath $TaskPath -TaskName $PopupTaskName -ErrorAction Stop
-    Write-Log "Popup task registered and started"
+    Write-Log "Popup task started"
 
     Write-Output "Popup shown, enforced reboot at $($Deadline.ToString("yyyy-MM-dd HH:mm")) (uptime $UptimeDays days)"
     exit 0
 }
 catch {
     Write-Log "Remediation failed: $($_.Exception.Message)"
+    # Roll back, so the next detection fails again and the remediation retries
+    Remove-RebootReminderSetup
+    Write-Log "Rolled back: tasks and registry state removed"
     Write-Error "Remediation failed: $($_.Exception.Message)"
     exit 1
 }

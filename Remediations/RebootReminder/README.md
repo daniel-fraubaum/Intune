@@ -25,7 +25,8 @@ During the last 15 minutes (`$FinalPhaseMinutes`) the popup turns red and can no
   - **Restart now** and **Remind me later** buttons, "later" (and the close button) hides the popup for `$SnoozeMinutes`
   - In the last `$FinalPhaseMinutes` the popup turns red and can no longer be hidden
 - **Enforces the reboot** after `$CountdownMinutes` (default 2 hours). Closing or killing the popup does not stop it
-- **Reboots right away** (after `$NoUserRebootDelaySeconds`) when nobody is signed in
+- **Reboots right away** (after `$NoUserRebootDelaySeconds`) when nobody is signed in: no `explorer.exe` and no active or disconnected user session, so kiosk and Shell Launcher devices count as signed in. If that check fails, the popup is used
+- **Rolls back** a failed setup (both tasks and the registry state), so the next detection retries
 - **Disables Fast Startup**, because Fast Startup keeps `LastBootUpTime` alive across shutdowns. Without this, a user who "shuts down every evening" never resets the uptime
 - Does not restart the countdown on every daily run while a reboot is already scheduled
 - Cleans up its scheduled tasks and registry state after the reboot
@@ -44,9 +45,10 @@ During the last 15 minutes (`$FinalPhaseMinutes`) the popup turns red and can no
 | 6 | Remediate | Disables Fast Startup (`HiberbootEnabled = 0` in `HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power`), takes effect with the upcoming reboot |
 | 7 | Remediate | Writes the schedule (start time, deadline, uptime) and all popup texts and colors to `HKLM:\SOFTWARE\<OrgPrefix>\RebootReminder` |
 | 8 | Remediate | Writes the popup script to `C:\Program Files\<OrgPrefix>\RebootReminder\RebootReminderPopup.ps1` with a locked down ACL. Stops if that folder is a link or not owned by SYSTEM, Administrators or TrustedInstaller (SYSTEM and Administrators full control, Users read and execute only) |
-| 9 | Remediate | Replaces the tasks of a previous cycle and registers the enforced reboot task under `\<OrgPrefix>\` in Task Scheduler |
-| 10 | Remediate | If **nobody is signed in** (no `explorer.exe`), the device reboots after `$NoUserRebootDelaySeconds` instead of waiting for the countdown. No popup task is registered |
-| 11 | Remediate | Registers the popup task and starts it for all signed-in users |
+| 9 | Remediate | Removes the tasks of a previous cycle under `\<OrgPrefix>\` in Task Scheduler |
+| 10 | Remediate | If **nobody is signed in** (no `explorer.exe` and no active or disconnected user session), it registers the enforced reboot task and the device reboots after `$NoUserRebootDelaySeconds` instead of waiting for the countdown. No popup task is registered. If the check fails or is unclear, the device counts as signed in |
+| 11 | Remediate | Registers the popup task, then the enforced reboot task, then starts the popup for all signed-in users |
+| 12 | Remediate | If a step fails, it removes both tasks and the registry state and ends with exit `1`, so the next detection fails again and the remediation retries |
 
 | Task | Runs as | Purpose |
 |---|---|---|
@@ -72,7 +74,7 @@ That's why the remediation only **sets things up** and ends within seconds. The 
 
 ### Cleanup after the reboot
 
-After the reboot the uptime is back to 0. The next detection run sees a compliant device and removes both scheduled tasks and the registry key. The popup script in `Program Files` stays and is overwritten on the next cycle.
+After the reboot the uptime is back to 0. The next detection run sees a compliant device and removes both scheduled tasks and the registry key. A popup task that is left on its own (registry key and reboot task already gone) is removed as well. The popup script in `Program Files` stays and is overwritten on the next cycle.
 
 ## 📋 Requirements
 
@@ -123,7 +125,7 @@ Adjust the Parameters block at the top of the scripts before you upload them.
 | `$ButtonNowText` | `"Restart now"` | Primary button |
 | `$ButtonLaterText` | `"Remind me later"` | Secondary button |
 | `$RestartingText` | `"Your device is restarting now. Please save your work immediately."` | Shown when the restart starts |
-| `$ShutdownComment` | `"Scheduled maintenance restart by IT."` | Comment passed to `shutdown.exe`, visible in the event log |
+| `$ShutdownComment` | `"Scheduled maintenance restart by IT."` | Comment passed to `shutdown.exe`, visible in the event log. Double quotes are replaced with single quotes, `shutdown.exe` cannot take them |
 
 The registry path, the Task Scheduler folder, the popup path and the log file are built from `$OrgPrefix` below the parameters. You do not need to change them.
 
@@ -222,9 +224,9 @@ State and tasks for troubleshooting (default `$OrgPrefix`):
 
 | Symptom | Check |
 |---|---|
-| No popup after the remediation ran | `RebootReminder.log` shows "Popup task registered and started". The task `RebootReminder-Popup` exists. Popup log `%TEMP%\RebootReminderPopup.log` of the user |
+| No popup after the remediation ran | `RebootReminder.log` shows "Popup task registered" and "Popup task started". The task `RebootReminder-Popup` exists. Popup log `%TEMP%\RebootReminderPopup.log` of the user. After "Rolled back" the setup failed and the next run retries |
 | Device restarts every day | `$TestUptimeDays` is still set in the detection script |
-| Device restarts right after the remediation | Nobody was signed in (no `explorer.exe`), or the previous schedule was overdue. The log shows which one |
+| Device restarts right after the remediation | Nobody was signed in (no `explorer.exe` and no active or disconnected user session, the log shows "Signed-in user check: No"), or the previous schedule was overdue. The log shows which one |
 | Countdown starts again on the next daily run | The task `RebootReminder-EnforcedReboot` or the registry state was removed. Detection only skips the run when both exist |
 
 ## 👤 Author
