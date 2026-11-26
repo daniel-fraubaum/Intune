@@ -5,7 +5,7 @@
     Version:     1.0
     Date:        2026-11-24
     Description: WPF restart reminder shown after a display language change by Set-DeviceLanguage.ps1.
-                 Copied to ProgramData and started in every user session by a scheduled task.
+                 Copied to Program Files and started in every user session by a scheduled task.
                  Reads all settings from HKLM. Without a deadline it only reminds the user, with a
                  deadline it shows a live countdown (the restart itself is done by a SYSTEM task).
                  Exits without showing anything if the device has restarted since the language

@@ -54,7 +54,7 @@ Before packaging, adjust the configuration block at the top of the script. These
 | `$MarkerKeyPath` | `HKLM:\SOFTWARE\CompanyName\DeviceLanguage` | Registry key for the detection markers. Set this to your own company key. |
 | `$MarkerValueName` | `Language` | Marker for the Company Portal apps (last selected language) |
 | `$InitialMarkerValueName` | `InitialLanguage` | Marker for the Autopilot app (only written with `-InitialSetup`) |
-| `$WorkingFolder` | `%ProgramData%\DeviceLanguage` | Temporary folder for the user script, cleaned up afterwards |
+| `$WorkingFolder` | `%ProgramFiles%\DeviceLanguage` | Folder for the temporary user script and the restart reminder popup. The user script is removed after the run, the popup at the next startup |
 | `$LogFile` | `%ProgramData%\Microsoft\IntuneManagementExtension\Logs\Set-DeviceLanguage.log` | Log file |
 | `$UserTaskTimeoutSeconds` | `300` | Maximum wait time for the user part |
 | `$RetryExitCode` | `1618` | Exit code for "try again later". Intune maps `1618` to Retry by default |
@@ -221,7 +221,7 @@ With `-RestartDeadlineMinutes` the popup shows a live countdown. During the last
 
 How it works:
 
-- `LanguageRestartPopup.ps1` is copied to `%ProgramData%\DeviceLanguage` (SYSTEM and Administrators full control, Users read and execute only)
+- `LanguageRestartPopup.ps1` is copied to `%ProgramFiles%\DeviceLanguage` (SYSTEM and Administrators full control, Users read and execute only). The script stops the reminder setup if that folder is a link or not owned by SYSTEM, Administrators or TrustedInstaller
 - Schedule, texts and colors are written to `<MarkerKeyPath>\RestartReminder`
 - Task Scheduler folder `\DeviceLanguage\`:
 
@@ -354,6 +354,7 @@ A failing user part is logged as an error but does not fail the app. The system 
 
 ## ⚠️ Good to know
 
+- **Working folder in Program Files.** Standard users can create folders in `C:\ProgramData` and then own them. A user could create the working folder there in advance and swap the popup or the temporary user script, which run in the session of other signed-in users. `C:\Program Files` does not allow that. Earlier versions used `%ProgramData%\DeviceLanguage`, that folder is no longer used and can be deleted.
 - **Do not combine** this with the Administrative Template policies *"Restricts the UI languages Windows should use for the selected user"* or *"Restrict selection of Windows menus and dialogs language"*. They lock the display language and block the user's choice.
 - **Time zone** is not touched on purpose. Use the Settings Catalog policy *Time Language Settings > Configure Time Zone* or keep automatic time zone detection.
 - **Shared devices:** Welcome screen, system locale and defaults for new profiles apply to everybody on the device.

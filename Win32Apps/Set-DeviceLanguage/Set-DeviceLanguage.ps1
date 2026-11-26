@@ -2,8 +2,8 @@
     Script:      Set-DeviceLanguage.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.5
-    Date:        2026-11-24
+    Version:     1.6
+    Date:        2026-11-26
     Description: Installs a Windows display language and applies display language, preferred
                  language list, regional format and country/region.
                  Settings are copied to the Welcome screen and new user profiles. If a user is
@@ -64,8 +64,9 @@ $MarkerValueName = "Language"
 # Marker value for the Autopilot app (written only with -InitialSetup, never changed afterwards)
 $InitialMarkerValueName = "InitialLanguage"
 
-# Working folder for the temporary user script
-$WorkingFolder = "$env:ProgramData\DeviceLanguage"
+# Working folder for the temporary user script and the restart reminder popup
+# Program Files, not ProgramData: standard users can create folders in ProgramData and would own them
+$WorkingFolder = "$env:ProgramFiles\DeviceLanguage"
 
 # Log file (IME log folder, collected with "Collect diagnostics")
 $LogFile = "$env:ProgramData\Microsoft\IntuneManagementExtension\Logs\Set-DeviceLanguage.log"
@@ -115,6 +116,20 @@ $ButtonNowText = "Restart now"
 $ButtonLaterText = "Remind me later"
 $RestartingText = "Your device is restarting now. Please save your work."
 $ShutdownComment = "Restart to apply the new Windows display language."
+
+# ==========================================================================================
+# Functions
+# ==========================================================================================
+
+# True if the folder is a real folder (no link) owned by SYSTEM, Administrators or TrustedInstaller
+function Test-TrustedFolder {
+    param ([string]$Path)
+    $TrustedOwners = @("S-1-5-18", "S-1-5-32-544", "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464")
+    $Item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if ($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return $false }
+    $Owner = (Get-Acl -LiteralPath $Path).GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+    return ($TrustedOwners -contains $Owner)
+}
 
 # ==========================================================================================
 # Logic
@@ -303,8 +318,18 @@ $SignedInUsers = Get-CimInstance -ClassName Win32_Process -Filter "Name = 'explo
     ForEach-Object { "$($_.Domain)\$($_.User)" } |
     Sort-Object -Unique
 
+# The temporary user script runs as the signed-in user, so it must not be written into a folder a user controls
+$WorkingFolderTrusted = $true
+if ($SignedInUsers) {
+    New-Item -Path $WorkingFolder -ItemType Directory -Force | Out-Null
+    $WorkingFolderTrusted = Test-TrustedFolder -Path $WorkingFolder
+}
+
 if (-not $SignedInUsers) {
     Write-Output "No signed-in user found. User part skipped, new profiles get the settings from step 5."
+}
+elseif (-not $WorkingFolderTrusted) {
+    Write-Error "$WorkingFolder is a link or not owned by SYSTEM or Administrators. User part skipped, system settings are applied anyway."
 }
 else {
     # Step 6.1: Write the temporary user script
@@ -461,8 +486,11 @@ else {
             New-ItemProperty -Path $ReminderRegPath -Name $Entry.Key -Value $Entry.Value[0] -PropertyType $Entry.Value[1] -Force -ErrorAction Stop | Out-Null
         }
 
-        # Step 8.3: Copy the popup to ProgramData with a locked down ACL (users read and execute only)
+        # Step 8.3: Copy the popup to Program Files with a locked down ACL (users read and execute only)
         New-Item -Path $WorkingFolder -ItemType Directory -Force | Out-Null
+        if (-not (Test-TrustedFolder -Path $WorkingFolder)) {
+            throw "$WorkingFolder is a link or not owned by SYSTEM or Administrators"
+        }
         $Acl = New-Object System.Security.AccessControl.DirectorySecurity
         $Acl.SetAccessRuleProtection($true, $false)
         $Inheritance = [System.Security.AccessControl.InheritanceFlags]"ContainerInherit, ObjectInherit"
