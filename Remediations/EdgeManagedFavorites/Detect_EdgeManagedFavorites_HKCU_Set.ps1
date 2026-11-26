@@ -48,7 +48,7 @@ $RemoveSet = $false
 
 # Staging location of the sets, relative to the profile of the signed-in user (HKCU).
 # Must be identical in every set remediation and in the merge remediation.
-$RegistryBasePath = "Software\YourCompany\EdgeManagedFavorites"
+$RegistryBasePath = "Software\CompanyName\EdgeManagedFavorites"
 
 # The merge remediation removes sets not refreshed for this many days (0 = never).
 # Must be identical in every set remediation and in the merge remediation.
@@ -96,7 +96,7 @@ function Assert-Configuration {
         throw "Invalid SetName ""$Name"". It must not be empty or contain \ / * ? [ ]."
     }
     if ([string]::IsNullOrWhiteSpace($BasePath) -or $BasePath -match "^(HK|Registry)|:|^\\|[*?\[\]]") {
-        throw "Invalid RegistryBasePath ""$BasePath"". It must be relative to the user profile, for example Software\YourCompany\EdgeManagedFavorites."
+        throw "Invalid RegistryBasePath ""$BasePath"". It must be relative to the user profile, for example Software\CompanyName\EdgeManagedFavorites."
     }
     if ($StaleDays -gt 0 -and ($RefreshDays -le 0 -or $RefreshDays -ge $StaleDays)) {
         throw "RefreshAfterDays ($RefreshDays) must be at least 1 and lower than StaleAfterDays ($StaleDays), otherwise the merge remediation removes this set as stale."

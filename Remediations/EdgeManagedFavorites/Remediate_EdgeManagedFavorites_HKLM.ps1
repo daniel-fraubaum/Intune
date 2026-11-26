@@ -46,7 +46,7 @@ $Favorites = @(
 $RemoveSet = $false
 
 # Staging location for all sets. Must be identical in every remediation.
-$RegistryBasePath = "HKLM:\SOFTWARE\YourCompany\EdgeManagedFavorites"
+$RegistryBasePath = "HKLM:\SOFTWARE\CompanyName\EdgeManagedFavorites"
 
 # Sets not refreshed for this many days are ignored and cleaned up (0 = never).
 $StaleAfterDays = 30

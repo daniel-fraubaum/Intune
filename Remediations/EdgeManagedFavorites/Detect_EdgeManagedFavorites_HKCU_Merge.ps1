@@ -28,7 +28,7 @@
 
 # Staging location of the sets, relative to every user profile (HKEY_USERS\<SID>).
 # Must be identical to $RegistryBasePath in every set remediation.
-$RegistryBasePath = "Software\YourCompany\EdgeManagedFavorites"
+$RegistryBasePath = "Software\CompanyName\EdgeManagedFavorites"
 
 # Sets not refreshed for this many days are removed (0 = never).
 # Must be identical to $StaleAfterDays in every set remediation.

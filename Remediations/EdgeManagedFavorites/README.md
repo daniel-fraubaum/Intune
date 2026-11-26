@@ -33,7 +33,7 @@ This package deploys Microsoft Edge managed favorites from **several independent
 | Scripts | One pair per set:<br>`Detect_EdgeManagedFavorites_HKLM.ps1`<br>`Remediate_EdgeManagedFavorites_HKLM.ps1` | One **set pair** per set:<br>`Detect_EdgeManagedFavorites_HKCU_Set.ps1`<br>`Remediate_EdgeManagedFavorites_HKCU_Set.ps1`<br><br>Plus **one merge pair**:<br>`Detect_EdgeManagedFavorites_HKCU_Merge.ps1`<br>`Remediate_EdgeManagedFavorites_HKCU_Merge.ps1` |
 | Runs as | SYSTEM | Set pair: the signed-in user<br>Merge pair: SYSTEM |
 | Assign to | Device groups | Set pair: user groups<br>Merge pair: device groups |
-| Staging key | `HKLM:\SOFTWARE\YourCompany\EdgeManagedFavorites` | `HKCU:\Software\YourCompany\EdgeManagedFavorites` of every user |
+| Staging key | `HKLM:\SOFTWARE\CompanyName\EdgeManagedFavorites` | `HKCU:\Software\CompanyName\EdgeManagedFavorites` of every user |
 | Edge policy | `HKLM:\SOFTWARE\Policies\Microsoft\Edge` | `HKCU:\Software\Policies\Microsoft\Edge` of every user |
 | `edge://policy`, column "Applies to" | Machine | Current user |
 | Delay | The policy is written in the same run | Up to one merge interval after the set remediation ran |
@@ -113,7 +113,7 @@ $Favorites = @(
     @{ Path = "";         Name = "Help Desk"; Url = "https://helpdesk.example.com" }
 )
 $RemoveSet        = $false
-$RegistryBasePath = "Software\YourCompany\EdgeManagedFavorites"
+$RegistryBasePath = "Software\CompanyName\EdgeManagedFavorites"
 $StaleAfterDays   = 30
 $RefreshAfterDays = 7
 ```
@@ -127,7 +127,7 @@ $Favorites = @(
     @{ Path = "Vienna"; Name = "Room Booking"; Url = "https://rooms-vienna.example.com" }
 )
 $RemoveSet        = $false
-$RegistryBasePath = "Software\YourCompany\EdgeManagedFavorites"
+$RegistryBasePath = "Software\CompanyName\EdgeManagedFavorites"
 $StaleAfterDays   = 30
 $RefreshAfterDays = 7
 ```
@@ -135,7 +135,7 @@ $RefreshAfterDays = 7
 **Graz** and **IT** follow the same pattern. The **merge** remediation only contains the paths, `$RegistryBasePath` and `$StaleAfterDays` are the same values as in every set:
 
 ```powershell
-$RegistryBasePath = "Software\YourCompany\EdgeManagedFavorites"
+$RegistryBasePath = "Software\CompanyName\EdgeManagedFavorites"
 $StaleAfterDays   = 30
 $EdgePolicyPath   = "Software\Policies\Microsoft\Edge"
 $EdgePolicyName   = "ManagedFavorites"
@@ -166,7 +166,7 @@ Company Favorites
 
 **What happens on the PC when Anna signs in:**
 
-1. Intune runs the set remediations **General** and **Vienna** for Anna (she is in both groups). They write `General` and `Vienna` to `HKCU:\Software\YourCompany\EdgeManagedFavorites\Sets` of Anna. **IT** and **Graz** do not run for her.
+1. Intune runs the set remediations **General** and **Vienna** for Anna (she is in both groups). They write `General` and `Vienna` to `HKCU:\Software\CompanyName\EdgeManagedFavorites\Sets` of Anna. **IT** and **Graz** do not run for her.
 2. Within the next hour the merge remediation runs as SYSTEM. It finds the profile of Anna, merges her two sets and writes the result to her Edge user policy.
 3. Edge picks up the policy without a restart.
 
@@ -237,7 +237,7 @@ Do not change anything outside the block. If the two blocks differ, detection ch
 | `$TopLevelName` | `Company Favorites` | Name of the managed favorites root folder in Edge. Empty = Edge default **Managed favorites**. **Must be identical in every favorites remediation.** If the values differ, the set that comes first alphabetically by `SetName` wins |
 | `$Favorites` | 4 sample links | Favorites of this set. `Path` = folders separated by `/`, empty = directly in the root folder. `Name` and `Url` are required |
 | `$RemoveSet` | `$false` | `$true` removes this set. HKLM: from the device, the policy is rebuilt from the remaining sets. HKCU: from the profile of the user, the merge remediation rebuilds the policy |
-| `$RegistryBasePath` | HKLM: `HKLM:\SOFTWARE\YourCompany\EdgeManagedFavorites`<br>HKCU: `Software\YourCompany\EdgeManagedFavorites` | Staging location of the sets. Replace `YourCompany` with your own name. In the HKCU variant the path is relative to the user profile (no `HKCU:\`), otherwise the scripts fail. Must be identical in **every** favorites remediation (HKCU: also in the merge remediation) |
+| `$RegistryBasePath` | HKLM: `HKLM:\SOFTWARE\CompanyName\EdgeManagedFavorites`<br>HKCU: `Software\CompanyName\EdgeManagedFavorites` | Staging location of the sets. Replace `CompanyName` with your own name. In the HKCU variant the path is relative to the user profile (no `HKCU:\`), otherwise the scripts fail. Must be identical in **every** favorites remediation (HKCU: also in the merge remediation) |
 | `$StaleAfterDays` | `30` | Sets not refreshed for this many days are ignored and deleted. `0` = never. Must be identical in every favorites remediation (HKCU: also in the merge remediation) |
 | `$RefreshAfterDays` | `7` | Detection requests a refresh of the own set after this many days. Must be at least `1` and lower than `$StaleAfterDays` (unless `$StaleAfterDays` is `0`, then `0` = never is allowed), otherwise both scripts fail with an error |
 | `$EdgePolicyPath` | `HKLM:\SOFTWARE\Policies\Microsoft\Edge` | HKLM pair only. Registry key of the Edge policy |
@@ -247,7 +247,7 @@ Do not change anything outside the block. If the two blocks differ, detection ch
 
 | Variable | Default | Description |
 |---|---|---|
-| `$RegistryBasePath` | `Software\YourCompany\EdgeManagedFavorites` | Staging location of the sets, relative to every user profile. Must be identical to `$RegistryBasePath` in every set remediation |
+| `$RegistryBasePath` | `Software\CompanyName\EdgeManagedFavorites` | Staging location of the sets, relative to every user profile. Must be identical to `$RegistryBasePath` in every set remediation |
 | `$StaleAfterDays` | `30` | Sets not refreshed for this many days are deleted. `0` = never. Must be identical to `$StaleAfterDays` in every set remediation |
 | `$EdgePolicyPath` | `Software\Policies\Microsoft\Edge` | Registry key of the Edge policy, relative to every user profile (`HKEY_USERS\<SID>`) |
 | `$EdgePolicyName` | `ManagedFavorites` | Name of the Edge policy value |
@@ -352,7 +352,7 @@ Repeat the set remediation for every favorites set with its own `$SetName`, the 
 3. Check the set and the policy:
 
    ```
-   reg query "HKLM\SOFTWARE\YourCompany\EdgeManagedFavorites\Sets" /s
+   reg query "HKLM\SOFTWARE\CompanyName\EdgeManagedFavorites\Sets" /s
    reg query "HKLM\SOFTWARE\Policies\Microsoft\Edge" /v ManagedFavorites
    ```
 
@@ -371,7 +371,7 @@ Repeat the set remediation for every favorites set with its own `$SetName`, the 
 2. Check the set in the profile of the user:
 
    ```
-   reg query "HKCU\Software\YourCompany\EdgeManagedFavorites\Sets" /s
+   reg query "HKCU\Software\CompanyName\EdgeManagedFavorites\Sets" /s
    ```
 
 3. From an elevated prompt run the merge remediation as SYSTEM:
@@ -399,7 +399,6 @@ The scripts write no log files. Everything goes to the output that Intune shows 
 ## ⚠️ Good to know
 
 - **Do not mix the variants.** Use either HKLM or HKCU for all favorites remediations, see [Choose one variant](#choose-one-variant-hklm-or-hkcu).
-- **Upgrading from version 1.2 of the HKCU variant.** Version 1.2 ran as SYSTEM with device assignment and staged its sets in `HKLM:\SOFTWARE\YourCompany\EdgeManagedFavoritesUser`. The current scripts never read or clean that key. When you upgrade, retire the 1.2 HKCU remediations in Intune, otherwise they keep writing the Edge user policy next to the merge remediation. Then delete that key on the devices, for example with `reg delete "HKLM\SOFTWARE\YourCompany\EdgeManagedFavoritesUser" /f`.
 - **Do not mix with other ManagedFavorites sources.** A Settings Catalog profile, GPO or another script that sets `ManagedFavorites` overwrites the merged value (or gets overwritten by it). A device policy from any source also wins over the HKCU variant.
 - **HKCU variant without merge remediation.** The set remediations only fill the staging keys. Without the merge remediation nothing reaches Edge.
 - **The staging key belongs to the user.** Users can change their own staging key and thereby add favorites to their own managed favorites. This never affects other users. The merge remediation treats the staging key as untrusted input: a set with invalid content is skipped and named in the output, the other sets of that user and all other users are processed normally.
