@@ -7,10 +7,10 @@ No Store Local Experience Packs, no Administrative Template policies that lock u
 ## ✨ Features
 
 - Installs the language pack and language features on demand (skips the download only if the UI language pack is really there, leftovers from a failed installation do not count)
-- Sets display language, preferred language list, regional format, country/region and system locale
+- Sets display language, preferred language list, regional format, country/region and system locale (the system locale follows `-Culture`)
 - Copies the settings to the Welcome screen and to new user profiles
 - Applies the settings to the signed-in user through a one-time scheduled task in user context
-- Keeps existing languages and keyboard layouts of the user, the new language is only moved to the top
+- Keeps existing languages and keyboard layouts, the new language is only moved to the top. The previous default keyboard stays the default, for the user and for the SYSTEM account that is copied to the Welcome screen
 - Works with no user signed in (Autopilot ESP device phase) and with a signed-in user (Company Portal)
 - Two separate detection markers, so the Autopilot app never overrides the user's later choice
 - Checks all prerequisites before changing anything
@@ -24,13 +24,13 @@ No Store Local Experience Packs, no Administrative Template policies that lock u
 
 | Step | Context | What happens |
 |---|---|---|
-| 1 | SYSTEM | Prerequisite checks (64-bit, admin, Windows 11 22H2+, module, valid tags) |
+| 1 | SYSTEM | Prerequisite checks (64-bit, admin, Windows 11 22H2+, module, valid tags with region, `de` alone is rejected) |
 | 2 | SYSTEM | If the UI language pack is missing (`Get-InstalledLanguage` shows no `LpCab` or `Lxp`): check for a pending reboot (not with `-InitialSetup`), wait for running servicing operations, then `Install-Language`, second attempt after 5 minutes if it fails or the language pack is still missing afterwards |
-| 3 | SYSTEM | Display language, language list, regional format, country/region and system locale for the SYSTEM account |
+| 3 | SYSTEM | Display language, language list (new language first, existing languages and keyboards kept, previous default keyboard stays default), regional format, country/region and system locale (from `-Culture`) for the SYSTEM account |
 | 4 | SYSTEM | `Copy-UserInternationalSettingsToSystem` to the Welcome screen and new user profiles |
-| 5 | User | For every signed-in user: one-time scheduled task that sets language list, display language, regional format and country/region |
+| 5 | User | For every signed-in user: one-time scheduled task that sets language list (previous default keyboard stays default), display language, regional format and country/region |
 | 6 | SYSTEM | Detection marker in the registry |
-| 7 | SYSTEM | Restart reminder, only if a user is signed in and `-InitialSetup` is not set: popup task for all users, cleanup task at the next startup, optional enforced restart task |
+| 7 | SYSTEM | Restart reminder, only if a user is signed in and `-InitialSetup` is not set: popup task for all users, cleanup task at the next startup, optional enforced restart task. If the setup fails, the three tasks and the reminder registry key are removed and the script falls back to `3010` |
 | 8 | Intune | Exit code `0` with restart reminder, otherwise `3010`. Exit code `1618` if the installation has to be retried |
 
 If nobody is signed in, steps 5 and 7 are skipped. The first user who signs in after the restart gets the settings from step 4.
@@ -90,10 +90,12 @@ These three are separate settings in Windows and it pays off to keep them separa
 | Setting | Windows name | Controls |
 |---|---|---|
 | `-Language` | Windows display language | Menus, dialogs, Settings app, Company Portal |
-| `-Culture` | Regional format | Date and time format, decimal separator, currency, first day of the week |
+| `-Culture` | Regional format and system locale | Date and time format, decimal separator, currency, first day of the week. Also the system locale (language for non-Unicode programs, code page for all users) |
 | `-GeoId` | Country or region | Store content, regional content like news and weather, some apps |
 
 A user in Vienna who prefers English menus still wants `18.11.2026`, a decimal comma and Euro. That is `-Language "en-US" -Culture "de-AT" -GeoId 14`.
+
+The system locale follows `-Culture`, not `-Language`. With `-Language "zh-CN" -Culture "de-AT"` non-Unicode programs keep the Western code page, so umlauts still show correctly. Both tags need a region (`de-AT`, not `de`), the script stops before changing anything otherwise.
 
 `-Culture` and `-GeoId` are optional:
 
@@ -244,7 +246,7 @@ Switches the Windows display language to German (Germany). Menus, dialogs, the S
 
 The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
 
-When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept, and your default keyboard stays the same.
 ```
 
 **Windows Language: English (US)**
@@ -254,7 +256,7 @@ Switches the Windows display language to English (United States). Menus, dialogs
 
 The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
 
-When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept, and your default keyboard stays the same.
 ```
 
 **Windows Language: English (UK)**
@@ -264,7 +266,7 @@ Switches the Windows display language to English (United Kingdom). Menus, dialog
 
 The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
 
-When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept, and your default keyboard stays the same.
 ```
 
 **Windows-taal: Nederlands**
@@ -274,7 +276,7 @@ Switches the Windows display language to Dutch (Netherlands). Menus, dialogs, th
 
 The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
 
-When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept, and your default keyboard stays the same.
 ```
 
 **Jazyk Windows: Slovenčina**
@@ -284,7 +286,7 @@ Switches the Windows display language to Slovak (Slovakia). Menus, dialogs, the 
 
 The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
 
-When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept, and your default keyboard stays the same.
 ```
 
 **Jazyk Windows: Čeština**
@@ -294,7 +296,7 @@ Switches the Windows display language to Czech (Czechia). Menus, dialogs, the Se
 
 The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
 
-When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept, and your default keyboard stays the same.
 ```
 
 **Windows nyelv: Magyar**
@@ -304,7 +306,7 @@ Switches the Windows display language to Hungarian (Hungary). Menus, dialogs, th
 
 The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
 
-When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept, and your default keyboard stays the same.
 ```
 
 **Windows 语言: 中文 (简体)**
@@ -314,7 +316,7 @@ Switches the Windows display language to Chinese (Simplified, China). Menus, dia
 
 The download and installation take about 20 to 45 minutes. Keep your device switched on and connected to the internet during that time. You can keep working.
 
-When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept.
+When the installation is done, a reminder appears in the bottom right corner of your screen. Restart your device to switch to the new language. Your other languages and keyboard layouts are kept, and your default keyboard stays the same.
 ```
 
 ## 🔍 Detection logic

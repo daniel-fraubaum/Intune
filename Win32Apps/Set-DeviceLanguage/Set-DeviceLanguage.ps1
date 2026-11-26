@@ -2,13 +2,15 @@
     Script:      Set-DeviceLanguage.ps1
     Author:      Daniel Fraubaum
     Blog:        https://headsinthecloud.blog
-    Version:     1.6
+    Version:     1.7
     Date:        2026-11-26
     Description: Installs a Windows display language and applies display language, preferred
-                 language list, regional format and country/region.
+                 language list, regional format, country/region and system locale (follows
+                 -Culture). Existing languages and keyboards are kept and the previous default
+                 keyboard stays the default.
                  Settings are copied to the Welcome screen and new user profiles. If a user is
                  signed in, the settings are also applied to that user via a one-time scheduled
-                 task in user context (existing languages and keyboards are kept).
+                 task in user context.
                  Built as Intune Win32 app in SYSTEM context for Autopilot ESP (required, with
                  -InitialSetup) and Company Portal (available).
                  If a user is signed in, a restart reminder popup (LanguageRestartPopup.ps1, part
@@ -179,7 +181,10 @@ if (-not $NoRestartReminder -and -not $InitialSetup -and -not (Test-Path -Path $
 
 foreach ($Tag in @($Language, $Culture)) {
     try {
-        [System.Globalization.CultureInfo]::GetCultureInfo($Tag) | Out-Null
+        $TagInfo = [System.Globalization.CultureInfo]::GetCultureInfo($Tag)
+        if ($TagInfo.IsNeutralCulture) {
+            $Problems += "Language or culture tag $Tag has no region. Use a tag with region, for example de-AT or en-US."
+        }
     }
     catch {
         $Problems += "Invalid language or culture tag: $Tag"
@@ -263,7 +268,8 @@ else {
             $ErrorMessage = $_.Exception.Message
             $ErrorCode = ""
             if ($ErrorMessage -match "ErrorCode:\s*(-?\d+)") {
-                $ErrorCode = " (0x{0:X8})" -f [int]$Matches[1]
+                # [int64] and the lower 32 bits, so positive and negative HRESULTs both format without an overflow
+                $ErrorCode = " (0x{0:X8})" -f ([int64]$Matches[1] -band 0xFFFFFFFFL)
             }
             $RebootAfterFailure = $PendingRebootKeys | Where-Object { Test-Path -Path $_ }
             if ($RebootAfterFailure) {
@@ -285,14 +291,38 @@ else {
 # Step 4: Apply settings to the SYSTEM account (source for Welcome screen and new users)
 try {
     Set-WinUILanguageOverride -Language $Language -ErrorAction Stop
-    $SystemLanguageList = New-WinUserLanguageList -Language $Language
-    Set-WinUserLanguageList -LanguageList $SystemLanguageList -Force -ErrorAction Stop
+
+    # Put the new language first, keep existing languages and keyboards, and keep the previous default keyboard
+    # (the SYSTEM settings are copied to the Welcome screen in step 5, so this is the keyboard at sign-in)
+    $CurrentList = Get-WinUserLanguageList
+    $PreviousDefaultInput = [string](Get-WinDefaultInputMethodOverride)
+    if ([string]::IsNullOrWhiteSpace($PreviousDefaultInput) -and $CurrentList.Count -gt 0 -and $CurrentList[0].InputMethodTips.Count -gt 0) {
+        $PreviousDefaultInput = $CurrentList[0].InputMethodTips[0]
+    }
+    $NewList = New-WinUserLanguageList -Language $Language
+    $Existing = @($CurrentList | Where-Object { $_.LanguageTag -eq $NewList[0].LanguageTag })
+    if ($Existing.Count -gt 0) {
+        $NewList.Clear()
+        $NewList.Add($Existing[0])
+    }
+    foreach ($Item in $CurrentList) {
+        if ($Item.LanguageTag -ne $NewList[0].LanguageTag) {
+            $NewList.Add($Item)
+        }
+    }
+    Set-WinUserLanguageList -LanguageList $NewList -Force -ErrorAction Stop
+    if (-not [string]::IsNullOrWhiteSpace($PreviousDefaultInput)) {
+        Set-WinDefaultInputMethodOverride -InputTip $PreviousDefaultInput -ErrorAction Stop
+        Write-Output "Default keyboard kept: $PreviousDefaultInput"
+    }
+
     Set-Culture -CultureInfo $Culture -ErrorAction Stop
     if ($GeoId -gt 0) {
         Set-WinHomeLocation -GeoId $GeoId -ErrorAction Stop
     }
-    Set-WinSystemLocale -SystemLocale $Language -ErrorAction Stop
-    Write-Output "System settings applied (display language, language list, regional format, region, system locale)."
+    # The system locale (language for non-Unicode programs) follows the regional format, not the display language
+    Set-WinSystemLocale -SystemLocale $Culture -ErrorAction Stop
+    Write-Output "System settings applied (display language, language list, default keyboard, regional format, region, system locale $Culture)."
 }
 catch {
     Write-Error "Applying system settings failed: $($_.Exception.Message)"
@@ -343,15 +373,27 @@ param (
     [int]$GeoId
 )
 try {
-    # Put the new language first and keep existing languages and keyboards
+    # Put the new language first, keep existing languages and keyboards, and keep the previous default keyboard
     $CurrentList = Get-WinUserLanguageList
+    $PreviousDefaultInput = [string](Get-WinDefaultInputMethodOverride)
+    if ([string]::IsNullOrWhiteSpace($PreviousDefaultInput) -and $CurrentList.Count -gt 0 -and $CurrentList[0].InputMethodTips.Count -gt 0) {
+        $PreviousDefaultInput = $CurrentList[0].InputMethodTips[0]
+    }
     $NewList = New-WinUserLanguageList -Language $Language
+    $Existing = @($CurrentList | Where-Object { $_.LanguageTag -eq $NewList[0].LanguageTag })
+    if ($Existing.Count -gt 0) {
+        $NewList.Clear()
+        $NewList.Add($Existing[0])
+    }
     foreach ($Item in $CurrentList) {
         if ($Item.LanguageTag -ne $NewList[0].LanguageTag) {
             $NewList.Add($Item)
         }
     }
     Set-WinUserLanguageList -LanguageList $NewList -Force -ErrorAction Stop
+    if (-not [string]::IsNullOrWhiteSpace($PreviousDefaultInput)) {
+        Set-WinDefaultInputMethodOverride -InputTip $PreviousDefaultInput -ErrorAction Stop
+    }
     Set-WinUILanguageOverride -Language $Language -ErrorAction Stop
     Set-Culture -CultureInfo $Culture -ErrorAction Stop
     if ($GeoId -gt 0) {
@@ -546,6 +588,17 @@ else {
     }
     catch {
         Write-Error "Restart reminder setup failed: $($_.Exception.Message). Falling back to 3010, Intune handles the restart."
+        # Remove what was set up so far, otherwise an enforced restart could fire without a popup
+        foreach ($TaskName in @($PopupTaskName, $RebootTaskName, $CleanupTaskName)) {
+            Stop-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        }
+        # Stopping the task ends conhost.exe, not the PowerShell child, so end running popups directly (as in step 8.1)
+        Get-CimInstance -ClassName Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -like "*$PopupFileName*" } |
+            ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName Terminate -ErrorAction SilentlyContinue | Out-Null }
+        Remove-Item -Path $ReminderRegPath -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Output "Restart reminder tasks and registry state removed."
     }
 }
 
