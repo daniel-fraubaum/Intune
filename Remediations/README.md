@@ -9,6 +9,7 @@ Unless noted otherwise, run them as **SYSTEM** in **64-bit PowerShell**.
 | [CVE-2013-3900](./CVE-2013-3900) | Enables the WinVerifyTrust signature validation fix (`EnableCertPaddingCheck`) for CVE-2013-3900 |
 | [DisableNetBIOS](./DisableNetBIOS) | Disables NetBIOS over TCP/IP on all active, physical network adapters |
 | [EdgeManagedFavorites](./EdgeManagedFavorites) | Merges the Edge managed favorites of several remediations into one sorted favorites tree (`ManagedFavorites` policy). Two variants: device policy for everyone on the device (HKLM) or user policy with only the sets assigned to each user (HKCU), use only one |
+| [FixDesktopDeletionRight](./FixDesktopDeletionRight) | Lets standard users delete shortcuts that installers put on the Public Desktop (Users get Full Control on `C:\Users\Public\Desktop`) |
 | [FixUnquotedServicePaths](./FixUnquotedServicePaths) | Finds and quotes unquoted service paths and uninstall strings |
 | [RebootReminder](./RebootReminder) | Shows a modern reboot popup with countdown after X days uptime and enforces the reboot<br><img src="RebootReminder/images/popup-dark.png" alt="RebootReminder popup in dark mode" width="360"> |
 | [SecureBootCertUpdate](./SecureBootCertUpdate) | Opts devices in to the Microsoft managed Secure Boot certificate update and detects the Windows UEFI CA 2023 |
